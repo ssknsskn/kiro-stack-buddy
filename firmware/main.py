@@ -5,7 +5,14 @@ Kiro Buddy - M5Stack Basic ファームウェア
 
 import time
 import gc
+import json
+import struct
 from machine import Pin
+
+try:
+    import bluetooth
+except ImportError:
+    bluetooth = None
 
 try:
     from ili9342c import ILI9342C, BLACK, WHITE, RED, GREEN, YELLOW, CYAN, MAGENTA, GRAY, DARK_GRAY
@@ -24,6 +31,18 @@ STATE_IDLE = "idle"
 STATE_IN_PROGRESS = "in_progress"
 STATE_WAITING_ON_USER = "waiting_on_user"
 STATE_COMPLETED = "completed"
+STATE_ERROR = "error"
+STATE_OFFLINE = "offline"
+
+# Nordic UART Service UUIDs
+NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+NUS_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+
+# BLE IRQイベント（MicroPython bluetooth API）
+_IRQ_CENTRAL_CONNECT = 1
+_IRQ_CENTRAL_DISCONNECT = 2
+_IRQ_GATTS_WRITE = 3
 
 # 状態ごとの色
 STATE_COLORS = {
@@ -31,6 +50,17 @@ STATE_COLORS = {
     STATE_IN_PROGRESS: YELLOW,
     STATE_WAITING_ON_USER: RED,
     STATE_COMPLETED: MAGENTA,
+    STATE_ERROR: RED,
+    STATE_OFFLINE: GRAY,
+}
+
+STATE_LABELS = {
+    STATE_IDLE: "IDLE",
+    STATE_IN_PROGRESS: "WORKING",
+    STATE_WAITING_ON_USER: "WAITING",
+    STATE_COMPLETED: "DONE",
+    STATE_ERROR: "ERROR",
+    STATE_OFFLINE: "IDLE",
 }
 
 # テスト用アニメーションパターン
@@ -41,7 +71,7 @@ ANIM_COMPLETED = "completed"
 ANIMATION_PATTERNS = [ANIM_IDLE, ANIM_WALK, ANIM_LOOK, ANIM_COMPLETED]
 ANIMATION_LABELS = {
     ANIM_IDLE: "Idle sway",
-    ANIM_WALK: "Walking",
+    ANIM_WALK: "Working",
     ANIM_LOOK: "Looking",
     ANIM_COMPLETED: "Completed",
 }
@@ -57,11 +87,23 @@ class KiroBuddy:
         print("[init] LCD初期化完了")
 
         # 状態管理
-        self.pet_state = STATE_IDLE
-        self.msg = "Starting..."
+        self.pet_state = STATE_OFFLINE
+        self.msg = "Waiting for BLE"
         self.last_update = time.ticks_ms()
         self.frame_count = 0
         self._btn_prev = [1, 1, 1]
+        self.pending_state = None
+        self.current_sequence = -1
+        self.completed_until = None
+
+        # BLE状態
+        self.ble = None
+        self.ble_rx_handle = None
+        self.ble_tx_handle = None
+        self.ble_conn_handle = None
+        self.ble_rx_buffer = bytearray()
+        self.ble_discard_until_newline = False
+        self.ble_link_connected = False
 
         # アニメーション管理
         self.anim_x = 112
@@ -83,7 +125,164 @@ class KiroBuddy:
         print("[init] BMP ロード完了")
         gc.collect()
 
+        self._init_ble()
         print("[init] 準備完了")
+
+    def _init_ble(self):
+        """Nordic UART ServiceのBLE Peripheralを初期化"""
+        if bluetooth is None:
+            print("[BLE] bluetoothモジュールなし。オフラインで起動")
+            return
+
+        try:
+            self.ble = bluetooth.BLE()
+            self.ble.active(True)
+            self.ble.irq(self._ble_irq)
+
+            service_uuid = bluetooth.UUID(NUS_SERVICE_UUID)
+            rx_uuid = bluetooth.UUID(NUS_RX_UUID)
+            tx_uuid = bluetooth.UUID(NUS_TX_UUID)
+            rx = (rx_uuid, bluetooth.FLAG_WRITE | bluetooth.FLAG_WRITE_NO_RESPONSE)
+            tx = (tx_uuid, bluetooth.FLAG_NOTIFY)
+            ((self.ble_rx_handle, self.ble_tx_handle),) = (
+                self.ble.gatts_register_services(((service_uuid, (rx, tx)),))
+            )
+            self._start_ble_advertising()
+            print("[BLE] KiroBuddy advertising開始")
+        except Exception as error:
+            self.ble = None
+            print(f"[BLE] 初期化失敗: {error}")
+
+    def _advertising_payload(self, name):
+        """BLE広告パケットを作成"""
+        name_bytes = name.encode("utf-8")
+        return bytearray(
+            bytes([2, 1, 6]) + bytes([len(name_bytes) + 1, 0x09]) + name_bytes
+        )
+
+    def _start_ble_advertising(self):
+        """KiroBuddyという名前でBLE広告を開始"""
+        if self.ble:
+            self.ble.gap_advertise(
+                100_000,
+                adv_data=self._advertising_payload("KiroBuddy"),
+            )
+
+    def _ble_irq(self, event, data):
+        """BLEイベントを受け取り、描画処理はメインループへ渡す"""
+        if event == _IRQ_CENTRAL_CONNECT:
+            conn_handle, _, _ = data
+            self.ble_conn_handle = conn_handle
+            self.ble_link_connected = True
+            print("[BLE] Central接続")
+        elif event == _IRQ_CENTRAL_DISCONNECT:
+            self.ble_conn_handle = None
+            self.ble_link_connected = False
+            print("[BLE] Central切断")
+            self._start_ble_advertising()
+        elif event == _IRQ_GATTS_WRITE:
+            conn_handle, value_handle = data
+            if value_handle == self.ble_rx_handle and self.ble:
+                received = self.ble.gatts_read(self.ble_rx_handle)
+                if len(self.ble_rx_buffer) + len(received) > 1024:
+                    self.ble_rx_buffer = bytearray()
+                    self.ble_discard_until_newline = True
+                if not self.ble_discard_until_newline:
+                    self.ble_rx_buffer.extend(received)
+                if bytes([10]) in received:
+                    self.ble_discard_until_newline = False
+
+    def _ble_notify(self, message):
+        """BLE接続中のBridgeへJSONを通知"""
+        if not self.ble or self.ble_conn_handle is None:
+            return
+        try:
+            payload = json.dumps(message, separators=(",", ":")).encode() + bytes([10])
+            self.ble.gatts_notify(self.ble_conn_handle, self.ble_tx_handle, payload)
+        except Exception as error:
+            print(f"[BLE] notify失敗: {error}")
+
+    def _process_ble_messages(self):
+        """受信バッファから改行区切りJSONを処理"""
+        while bytes([10]) in self.ble_rx_buffer:
+            line_end = self.ble_rx_buffer.index(bytes([10]))
+            line = bytes(self.ble_rx_buffer[:line_end])
+            self.ble_rx_buffer = self.ble_rx_buffer[line_end + 1 :]
+            if not line:
+                continue
+            try:
+                message = json.loads(line.decode("utf-8"))
+                self._handle_ble_message(message)
+            except (ValueError, UnicodeError) as error:
+                print(f"[BLE] JSON受信エラー: {error}")
+                self._ble_notify({"type": "error", "message": "invalid_json"})
+
+    def _handle_ble_message(self, message):
+        """受信した状態を次のフレームで適用する"""
+        if not isinstance(message, dict):
+            return
+
+        state = message.get("state") or message.get("session_status")
+        if state not in {
+            STATE_IDLE,
+            STATE_IN_PROGRESS,
+            STATE_WAITING_ON_USER,
+            STATE_COMPLETED,
+            STATE_ERROR,
+        }:
+            return
+
+        try:
+            sequence = int(message.get("sequence", self.current_sequence + 1))
+        except (TypeError, ValueError):
+            self._ble_notify({"type": "error", "message": "invalid_sequence"})
+            return
+        if sequence <= self.current_sequence:
+            return
+
+        self.pending_state = (sequence, state, str(message.get("message", state))[:40])
+        self._ble_notify({"type": "ack", "sequence": sequence, "ok": True})
+
+    def _apply_pending_state(self):
+        """受信状態を描画フレーム境界で適用"""
+        if self.pending_state is None:
+            return
+
+        sequence, state, message = self.pending_state
+        self.pending_state = None
+        if sequence <= self.current_sequence:
+            return
+
+        self.current_sequence = sequence
+        self.pet_state = state
+        self.msg = message
+        self._set_animation_for_state(state)
+        if state == STATE_COMPLETED:
+            self.completed_until = time.ticks_add(time.ticks_ms(), 2000)
+        else:
+            self.completed_until = None
+        print(f"[STATE] BLE状態: {state} ({message})")
+
+    def _set_animation_for_state(self, state):
+        """Kiro状態をアニメーションへ変換"""
+        if state == STATE_IN_PROGRESS:
+            pattern = ANIM_WALK
+        elif state == STATE_WAITING_ON_USER or state == STATE_ERROR:
+            pattern = ANIM_LOOK
+        elif state == STATE_COMPLETED:
+            pattern = ANIM_COMPLETED
+        else:
+            pattern = ANIM_IDLE
+        self._set_animation_pattern_by_name(pattern)
+
+    def _update_ble_state(self):
+        """BLE接続状態の変化を画面状態へ反映"""
+        if self.ble_link_connected:
+            return
+        if self.pet_state != STATE_OFFLINE:
+            self.pet_state = STATE_OFFLINE
+            self.msg = "Waiting for BLE"
+            self._set_animation_pattern_by_name(ANIM_LOOK)
 
     def _load_bmp(self, filename):
         """BMPファイルをRGB565バイト列としてメモリにロード"""
@@ -110,6 +309,16 @@ class KiroBuddy:
                 index += row_bytes
 
             return data
+
+    def _set_animation_pattern_by_name(self, pattern):
+        """名前でアニメーションパターンを変更"""
+        if pattern in ANIMATION_PATTERNS:
+            self.animation_index = ANIMATION_PATTERNS.index(pattern)
+            self.animation_pattern = pattern
+            self.anim_frame = 0
+            self.anim_x = 112
+            self.anim_y = 30
+            self.facing_left = False
 
     def _set_animation_pattern(self, index):
         """アニメーションパターンを変更"""
@@ -177,6 +386,16 @@ class KiroBuddy:
 
     def _update_animation(self):
         """現在のアニメーションパターンを1フレーム進める"""
+        if (
+            self.pet_state == STATE_COMPLETED
+            and self.completed_until is not None
+            and time.ticks_diff(time.ticks_ms(), self.completed_until) >= 0
+        ):
+            self.pet_state = STATE_IDLE
+            self.msg = "Ready"
+            self._set_animation_pattern_by_name(ANIM_IDLE)
+            self.completed_until = None
+
         frame = self.anim_frame
 
         if self.animation_pattern == ANIM_IDLE:
@@ -295,21 +514,18 @@ class KiroBuddy:
         self.anim_x_prev = self.anim_x
         self.anim_y_prev = self.anim_y
 
-        # ステータス表示
+        # 最小限の状態表示。詳細なログやcredit/tokenは表示しない。
         color = STATE_COLORS.get(self.pet_state, WHITE)
-        status_text = f"State: {self.pet_state}"
+        status_text = (STATE_LABELS.get(self.pet_state, "IDLE") + "       ")[:7]
         lcd.text_bg(status_text, 10, 150, color, BLACK, 2)
 
-        # 現在のアニメーションパターン表示
-        pattern_text = f"Anim: {self.animation_pattern}"
-        lcd.text_bg(pattern_text, 10, 170, CYAN, BLACK, 1)
+        bridge_text = (("BRIDGE CONNECTED" if self.ble_link_connected else "BRIDGE OFFLINE") + "                ")[:16]
+        bridge_color = GREEN if self.ble_link_connected else GRAY
+        lcd.text_bg(bridge_text, 10, 215, bridge_color, DARK_GRAY, 1)
 
-        # フッター
-        import utime
-        t = utime.localtime()
-        time_str = f"{t[3]:02d}:{t[4]:02d}:{t[5]:02d}"
-        lcd.text_bg(time_str, 10, 210, GRAY, DARK_GRAY, 1)
-        lcd.text_bg("BLE: Ready", 150, 210, GREEN, DARK_GRAY, 1)
+        ble_text = (("BLE: ON" if self.ble_link_connected else "BLE: OFF") + "        ")[:8]
+        lcd.text_bg(ble_text, 250, 215, bridge_color, DARK_GRAY, 1)
+
 
     def _check_buttons(self):
         """ボタン入力チェック"""
@@ -325,11 +541,12 @@ class KiroBuddy:
                     # 中央ボタンBはテスト用アニメーション切り替え
                     self._next_animation_pattern()
                 else:
-                    # A/Cは状態切り替え
-                    state_index = states.index(self.pet_state)
+                    # A/Cは手動テスト用の状態切り替え
+                    state_index = states.index(self.pet_state) if self.pet_state in states else 0
                     self.pet_state = states[(state_index + 1) % len(states)]
+                    self._set_animation_for_state(self.pet_state)
                     self.msg = f"Button {btn_names[index]} - {self.pet_state}"
-                    print(f"[STATE] 状態変更: {self.pet_state}")
+                    print(f"[STATE] 手動状態変更: {self.pet_state}")
 
             self._btn_prev[index] = button
 
@@ -340,6 +557,9 @@ class KiroBuddy:
 
         loop_count = 0
         while True:
+            self._process_ble_messages()
+            self._apply_pending_state()
+            self._update_ble_state()
             self._check_buttons()
 
             # 50msごとにアニメーションと描画を更新

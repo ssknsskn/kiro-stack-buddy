@@ -4,14 +4,17 @@
 
 Kiro IDEの作業状態をデスク上で確認できるように、M5Stack BasicへKiroキャラクターを表示するプロジェクトです。
 
-今回の区切りでは、通信連携よりも、次の表示機能を優先して実装しました。
+今回の区切りでは、Kiro IDEのイベントをBLEでM5Stackへ送り、Kiroの状態に応じてアニメーションを切り替える最小構成まで実装しました。
 
 - Kiro画像の表示
 - 黒背景と白黒キャラクターの調整
 - 右向き・左向き画像の切り替え
-- 状態別アニメーション
+- `idle`、`walk`、`look`、`completed`のアニメーション
+- Kiro Hookからの状態イベント受信
+- M5StackのBLE NUS受信とACK
 - M5Stack実機へのデプロイ
-- 中央ボタンによるアニメーションテスト
+
+Wi-Fi、credit/token表示、ファイル内容、コマンド本文、セッション履歴は対象外です。M5Stackは、Kiroが待機中・作業中・ユーザー待ち・完了のどの状態かを素早く確認するためのデバイスとします。
 
 ## 使用機材と構成
 
@@ -23,9 +26,6 @@ Kiro IDEの作業状態をデスク上で確認できるように、M5Stack Basi
 - Python 3.13以上
 - `uv`、`mpremote`
 
-将来的な通信構成は次のとおりです。
-
-```text
 Kiro IDE Hook
      │ HTTP POST
      ▼
@@ -35,7 +35,29 @@ Bridge Server（macOS）
 M5Stack Basic
 ```
 
-`bridge/server.py`と`.kiro/hooks/`は準備済みですが、現時点の`firmware/main.py`は表示・アニメーションの実機確認を優先しています。BLEで受信した状態をファームウェアへ反映する処理は次の段階です。
+HookイベントはBridgeで次の状態へ変換します。
+
+| Hookイベント | 状態 | アニメーション |
+|---|---|---|
+| `SessionStart` | `idle` | `idle` |
+| `PreToolUse` | `in_progress` | `walk` |
+| `PostToolUse` / `PostFileSave` | `idle` | `idle` |
+| `Stop` | `completed` | `completed`（約2秒後にidle） |
+
+BridgeとM5Stackは改行区切りJSONで通信します。
+
+```json
+{
+  "v": 1,
+  "type": "state",
+  "state": "in_progress",
+  "message": "Working",
+  "sequence": 3,
+  "timestamp": 1720000000
+}
+```
+
+M5Stack側ではBLE IRQで受信データをバッファへ追加し、メインループのフレーム境界でJSONを解析・適用します。BLE IRQからLCDを直接描画しないことで、アニメーションの描画周期を維持します。
 
 ## キャラクター画像を使うまで
 
@@ -94,12 +116,24 @@ M5Stackの画面は320×240ピクセルです。Kiroは96×96ピクセルで、�
 │                                │
 │          Kiro 96×96            │
 │                                │
-│ State: idle                    │
-│ Anim: idle                     │
+│           WORKING              │
 │                                │
-│  時刻                 BLE: Ready│
+│  BRIDGE CONNECTED      BLE: ON │
 └────────────────────────────────┘
 ```
+
+画面には、主役のKiro、短い状態名、Bridge接続状態、BLE状態だけを表示します。Bridge未接続時は、状態欄は`IDLE`のまま、下部に`BRIDGE OFFLINE`と表示します。これにより、Kiroの状態とBridgeの接続状態を混同しないようにします。
+
+| 状態 | 表示 | アニメーション |
+|---|---|---|
+| `offline` | `IDLE` + `BRIDGE OFFLINE` | look（その場で左右を見る） |
+| `idle` | `IDLE` | idle |
+| `in_progress` | `WORKING` | walk |
+| `waiting_on_user` | `WAITING` | look |
+| `completed` | `DONE` | completed（約2秒） |
+| `error` | `ERROR` | look |
+
+credit、token、ファイル名、コマンド本文、プロンプト本文、セッションID、詳細ログは表示しません。これらはM5Stackで常時確認する情報ではなく、画面の狭さやプライバシーの観点からも対象外としています。
 
 `KIRO BUDDY`というヘッダーは削除し、キャラクターを大きく表示する構成にしました。背景はRGB565の完全な黒`0x0000`です。
 
@@ -213,14 +247,22 @@ kiroStack/
 ```bash
 python3 -m py_compile firmware/main.py
 python3 -m py_compile bridge/server.py
+python3 -m py_compile scripts/ble_test_client.py
 bash -n scripts/deploy.sh
+python3 -c 'import json, pathlib; [json.loads(p.read_text()) for p in pathlib.Path(".kiro/hooks").glob("*.json")]; print("hooks: ok")'
 ```
 
-実機では、LCD初期化、BMPロード、メインループ、Bボタン入力、各アニメーションの切り替えを確認しています。
+BLEテストクライアントは、M5Stackを検出してNUSへ状態JSONを送信します。
+
+```bash
+uv run python scripts/ble_test_client.py
+```
+
+実機では、LCD初期化、BMPロード、BLE advertising、Bridge接続、状態JSON受信、ACK、状態別アニメーション切り替えを確認します。
 
 ## 今後の課題
 
-- BLE受信処理を`firmware/main.py`へ追加
-- Kiro Hookのセッション状態とアニメーションを接続
-- LCD描画のちらつきをさらに低減
-- BLEブリッジの接続・再接続テスト
+- BLEの暗号化ペアリングを検討
+- Kiro Hookのpermission情報が取得できる場合の`waiting_on_user`判定
+- Windows / Linuxでの導入確認
+- 必要になった場合のみ利用量表示を検討

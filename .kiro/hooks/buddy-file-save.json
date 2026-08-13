@@ -4,11 +4,11 @@
     {
       "name": "Buddy: File Save",
       "trigger": "PostFileSave",
-      "description": "ファイル保存時にBLEブリッジへ通知し、M5Stackのペットに作業中を知らせる",
-      "matcher": "\\\\.(py|ts|js|json|md)$",
+      "description": "ファイル保存時にBLEブリッジへ通知し、M5Stackのペットを待機状態にする",
+      "matcher": "\\.(py|ts|js|json|md)$",
       "action": {
         "type": "command",
-        "command": "echo '[HOOK] PostFileSave fired at '$(date '+%H:%M:%S') >> /tmp/kiro-buddy-hooks.log && curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"tool_use\"}' 2>/dev/null || true"
+        "command": "echo '[HOOK] PostFileSave fired at '$(date '+%H:%M:%S') >> /tmp/kiro-buddy-hooks.log && curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"file_save\"}' 2>/dev/null || true"
       },
       "enabled": true
     }

@@ -30,17 +30,10 @@ async def test():
     await client.start_notify(NUS_TX_UUID, on_notify)
     await asyncio.sleep(2)
 
-    # 送信テスト - 短いメッセージ
-    msg = b'hello\n'
+    # 状態スナップショット送信
+    msg = b'{"v":1,"type":"state","state":"in_progress","message":"Working","sequence":1}\n'
     print(f"送信: {msg}")
     await client.write_gatt_char(NUS_RX_UUID, msg, response=False)
-
-    await asyncio.sleep(2)
-
-    # JSON送信
-    msg2 = b'{"running":1,"msg":"test","total":1,"waiting":0}\n'
-    print(f"送信: {msg2}")
-    await client.write_gatt_char(NUS_RX_UUID, msg2, response=False)
 
     await asyncio.sleep(5)
     await client.disconnect()
