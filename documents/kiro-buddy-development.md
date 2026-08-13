@@ -27,6 +27,7 @@ Wi-Fi、credit/token表示、ファイル内容、コマンド本文、セッシ
 - `uv`、`mpremote`
 
 Kiro IDE Hook
+```text
      │ HTTP POST
      ▼
 Bridge Server（macOS）
@@ -40,8 +41,7 @@ HookイベントはBridgeで次の状態へ変換します。
 | Hookイベント | 状態 | アニメーション |
 |---|---|---|
 | `SessionStart` | `idle` | `idle` |
-| `PreToolUse` | `in_progress` | `walk` |
-| `PostToolUse` / `PostFileSave` | `idle` | `idle` |
+| `UserPromptSubmit` | `in_progress` | `walk` |
 | `Stop` | `completed` | `completed`（約2秒後にidle） |
 
 BridgeとM5Stackは改行区切りJSONで通信します。
@@ -61,40 +61,42 @@ M5Stack側ではBLE IRQで受信データをバッファへ追加し、メイン
 
 ## キャラクター画像を使うまで
 
-最初はPillowで円や矩形を組み合わせ、Kiroキャラクターをコードから生成していました。しかし、輪郭や目の位置が元画像に似ず、単純な図形では自然なキャラクターになりませんでした。
+画像の権利を明確にしたままGitHubで公開できるよう、Kiro画像はリポジトリへ同梱しない方針にしました。利用者が権利を確認して用意したローカル画像を、ホスト側でM5Stack用の形式へ変換します。外部URLやCDNからの自動取得は行いません。
 
-そこで、元画像を加工して使用する方針へ変更しました。
+画像変換には`Pillow==12.3.0`を使用し、`uv sync`で依存関係をインストールします。入力画像はPNG、JPGなどPillowが読み込める形式を利用できます。
 
-```text
-firmware/assets/kiro.png
+## 画像アセットの準備
+
+リポジトリのルートから、利用者が用意した画像を指定して実行します。
+
+```bash
+uv run python scripts/prepare_assets.py \
+  --input /path/to/your-image.png
 ```
 
-元画像はパレット形式だったため、RGBへ変換してからグレースケール化しました。ピクセル値を確認すると、キャラクターと背景の主な値は次のとおりでした。
+スクリプトは次の処理を行います。
 
-- `0`：キャラクター側
-- `97`：背景側
+1. 入力画像を96×96ピクセルへリサイズする
+2. グレースケール化して2値化する（既定の閾値は`128`）
+3. 白黒画像をRGB565の16-bit BMPとして保存する
+4. 同じ画像を左右反転し、左向き用BMPも生成する
 
-このため、閾値50で二値化しました。
-
-```python
-from PIL import Image
-
-img = Image.open("firmware/assets/kiro.png").convert("RGBA")
-gray = img.convert("L")
-black_and_white = gray.point(
-    lambda value: 0 if value < 50 else 255,
-    "1",
-).convert("RGB")
-```
-
-M5Stack上で扱いやすいように96×96ピクセルへ変換し、RGB565 BMPとして保存しました。実際に使用するファイルは次の2つです。
+生成されるファイルは次の2つです。出力サイズはファームウェアが前提とする96×96に固定しています。
 
 ```text
 firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-左向き画像は、白黒化した画像を左右反転して作成しました。過去に作成した比較用BMP、PNG、SVGなどの古い画像素材は、検証履歴として`firmware/assets/`に残しています。
+入力画像の明るさに合わない場合は、閾値を0〜255の範囲で調整できます。
+
+```bash
+uv run python scripts/prepare_assets.py \
+  --input /path/to/your-image.png \
+  --threshold 100
+```
+
+生成BMPは利用者のローカル環境だけで使う画像アセットです。`firmware/assets/`は生成ファイルをGitで追跡しない設定になっているため、権利を確認していない画像をcommit・再配布しないでください。
 
 ## PNG/JPGではなくBMPを使う理由
 
@@ -193,10 +195,16 @@ lcd.fill(BLACK)
 
 ## M5Stackへのデプロイ
 
+依存関係をインストールした後、デプロイ前に利用者の画像からBMPを生成します。
+
 ```bash
 uv sync
+uv run python scripts/prepare_assets.py \
+  --input /path/to/your-image.png
 ./scripts/deploy.sh /dev/cu.usbserial-XXXX
 ```
+
+`firmware/assets/`に生成済みBMPがない場合、`deploy.sh`は転送せずに停止します。
 
 デプロイスクリプトは次の4ファイルをM5Stackへ転送します。
 
@@ -227,15 +235,18 @@ uv run mpremote connect /dev/cu.usbserial-XXXX reset
 kiroStack/
 ├── .kiro/hooks/                         # Kiro IDE Hook設定
 ├── bridge/
+│   ├── __init__.py
 │   └── server.py                         # HTTP + BLEブリッジ
 ├── documents/
 │   └── kiro-buddy-development.md        # この開発記録
 ├── firmware/
 │   ├── main.py                           # 表示・アニメーション
 │   ├── ili9342c.py                       # ILI9342Cドライバ
-│   └── assets/                            # 現行・過去の画像素材
+│   └── assets/                            # Git管理外のローカル生成画像
 ├── scripts/
+│   ├── ble_test_client.py                # BLE単体テスト
 │   ├── deploy.sh                         # M5Stackデプロイ
+│   ├── prepare_assets.py                 # ローカル画像からBMPを生成
 │   └── run_bridge.sh                     # ブリッジ起動
 ├── pyproject.toml
 ├── uv.lock
@@ -248,8 +259,10 @@ kiroStack/
 python3 -m py_compile firmware/main.py
 python3 -m py_compile bridge/server.py
 python3 -m py_compile scripts/ble_test_client.py
-bash -n scripts/deploy.sh
-python3 -c 'import json, pathlib; [json.loads(p.read_text()) for p in pathlib.Path(".kiro/hooks").glob("*.json")]; print("hooks: ok")'
+python3 -m py_compile scripts/prepare_assets.py
+bash -n scripts/deploy.sh scripts/run_bridge.sh
+python3 -c 'import json, pathlib; p=pathlib.Path(".kiro/hooks/buddy-state.json"); d=json.loads(p.read_text()); assert [h["trigger"] for h in d["hooks"]] == ["SessionStart", "UserPromptSubmit", "Stop"]; print("hooks: ok")'
+git diff --check
 ```
 
 BLEテストクライアントは、M5Stackを検出してNUSへ状態JSONを送信します。

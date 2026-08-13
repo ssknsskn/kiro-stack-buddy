@@ -1,0 +1,35 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Buddy: Session Start",
+      "trigger": "SessionStart",
+      "description": "Kiroセッション開始時にBLEブリッジへ待機状態を通知する",
+      "enabled": true,
+      "action": {
+        "type": "command",
+        "command": "curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"session_start\"}' 2>/dev/null || true"
+      }
+    },
+    {
+      "name": "Buddy: Prompt Submit",
+      "trigger": "UserPromptSubmit",
+      "description": "ユーザー依頼の開始時にBLEブリッジへ作業中状態を通知する",
+      "enabled": true,
+      "action": {
+        "type": "command",
+        "command": "curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"prompt_submit\"}' 2>/dev/null || true"
+      }
+    },
+    {
+      "name": "Buddy: Stop",
+      "trigger": "Stop",
+      "description": "エージェントの応答・実行ターン完了時にBLEブリッジへ完了状態を通知する",
+      "enabled": true,
+      "action": {
+        "type": "command",
+        "command": "curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"stop\"}' 2>/dev/null || true"
+      }
+    }
+  ]
+}

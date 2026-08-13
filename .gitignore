@@ -12,6 +12,13 @@ wheels/
 # Virtual environments
 .venv/
 
+# Generated local firmware image assets
+firmware/assets/*
+!firmware/assets/.gitkeep
+
 # Firmware binaries (large files)
 firmware/bin/*.bin
 firmware/__pycache__/
+
+
+documents

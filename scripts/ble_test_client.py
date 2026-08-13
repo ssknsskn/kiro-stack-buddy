@@ -30,10 +30,15 @@ async def test():
     await client.start_notify(NUS_TX_UUID, on_notify)
     await asyncio.sleep(2)
 
-    # 状態スナップショット送信
+    # 状態スナップショット送信。Bridgeと同じく20バイト単位に分割する。
     msg = b'{"v":1,"type":"state","state":"in_progress","message":"Working","sequence":1}\n'
     print(f"送信: {msg}")
-    await client.write_gatt_char(NUS_RX_UUID, msg, response=False)
+    for index in range(0, len(msg), 20):
+        await client.write_gatt_char(
+            NUS_RX_UUID,
+            msg[index : index + 20],
+            response=False,
+        )
 
     await asyncio.sleep(5)
     await client.disconnect()

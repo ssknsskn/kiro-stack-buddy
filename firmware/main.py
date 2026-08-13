@@ -178,6 +178,9 @@ class KiroBuddy:
         elif event == _IRQ_CENTRAL_DISCONNECT:
             self.ble_conn_handle = None
             self.ble_link_connected = False
+            # 再接続後にBridgeの同じ最新スナップショットを再適用できるようにする
+            self.current_sequence = -1
+            self.pending_state = None
             print("[BLE] Central切断")
             self._start_ble_advertising()
         elif event == _IRQ_GATTS_WRITE:

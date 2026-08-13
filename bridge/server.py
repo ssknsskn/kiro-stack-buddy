@@ -85,6 +85,8 @@ class BuddyBridge:
 
         event_states = {
             "session_start": (STATE_IDLE, "Ready"),
+            "prompt_submit": (STATE_IN_PROGRESS, "Working"),
+            "stop": (STATE_COMPLETED, "Done"),
             "session_end": (STATE_COMPLETED, "Done"),
             "tool_start": (STATE_IN_PROGRESS, "Working"),
             "tool_use": (STATE_IDLE, "Ready"),
