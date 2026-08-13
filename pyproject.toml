@@ -1,0 +1,15 @@
+[project]
+name = "kiro-stack-buddy"
+version = "0.1.0"
+description = "Kiro IDE + M5Stack Basic BLE Buddy - デスクペットがKiroの状態を表示"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "bleak>=0.22.0",
+    "aiohttp>=3.9.0",
+    "mpremote>=1.24.0",
+    "esptool>=5.3.1",
+]
+
+[project.scripts]
+kiro-buddy-bridge = "bridge.server:main"

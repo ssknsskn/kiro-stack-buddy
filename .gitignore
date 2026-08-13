@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+
+# macOS metadata
+.DS_Store
+
+# Virtual environments
+.venv/
+
+# Firmware binaries (large files)
+firmware/bin/*.bin
+firmware/__pycache__/

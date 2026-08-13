@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Buddy: Tool Start",
+      "trigger": "PreToolUse",
+      "description": "ツール実行直前にペットをbusyに",
+      "enabled": true,
+      "action": {
+        "type": "command",
+        "command": "echo '[HOOK] PreToolUse fired at '$(date '+%H:%M:%S') >> /tmp/kiro-buddy-hooks.log && curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"tool_start\"}' 2>/dev/null || true"
+      }
+    }
+  ]
+}

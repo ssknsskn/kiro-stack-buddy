@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Buddy: Session Start",
+      "trigger": "SessionStart",
+      "description": "セッション開始時にBLEブリッジへ通知し、M5Stackのペットを起こす",
+      "enabled": true,
+      "action": {
+        "type": "command",
+        "command": "echo '[HOOK] SessionStart fired at '$(date '+%H:%M:%S') >> /tmp/kiro-buddy-hooks.log && curl -s -X POST http://127.0.0.1:9876/event -H \"Content-Type: application/json\" -d '{\"event\":\"session_start\"}' 2>/dev/null || true"
+      }
+    }
+  ]
+}
