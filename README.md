@@ -1,5 +1,7 @@
 # Kiro Stack Buddy
 
+![Kiro Stack Buddy overview](kiroStackBuddy_topImage.jpeg)
+
 [日本語](README.ja.md) | English
 
 Kiro Stack Buddy is a device project that displays Kiro IDE activity on an M5Stack Basic.
