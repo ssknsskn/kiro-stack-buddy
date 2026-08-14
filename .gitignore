@@ -20,5 +20,5 @@ firmware/assets/*
 firmware/bin/*.bin
 firmware/__pycache__/
 
-
-documents
+# Local development notes not included in the public repository
+documents/kiro-buddy-development2.md

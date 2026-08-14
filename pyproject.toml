@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools==75.8.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "kiro-stack-buddy"
 version = "0.1.0"
@@ -14,3 +18,11 @@ dependencies = [
 
 [project.scripts]
 kiro-buddy-bridge = "bridge.server:main"
+
+[tool.setuptools.packages.find]
+include = ["bridge*"]
+
+# 組織の信頼済みPyPIプロキシを使用し、依存パッケージの取得元を管理する。
+[[tool.uv.index]]
+url = "https://pypi.flatt.tech/simple/"
+default = true

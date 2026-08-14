@@ -1,32 +1,33 @@
 # Kiro Stack Buddy
 
-Kiro IDEの作業状態をM5Stack Basicに表示する、小さなデスクコンパニオンです。
+[日本語](README.ja.md) | English
 
-Kiro Stack Buddyは、Kiro IDEのワークスペースとM5Stack Basicを**Bluetooth Low Energy（BLE）**で接続します。ローカルBridgeがKiro Hookのイベントを受け取り、現在の作業状態をM5Stackへ送信します。M5Stack上では、状態に応じてKiroキャラクターのアニメーションが変化します。
-PC画面ばかり見ずに、たまには物理世界にあるデバイス上でKiroを眺めませんか?少し癒されますよ。
+Kiro Stack Buddy is a device project that displays Kiro IDE activity on an M5Stack Basic.
 
-> **Status:** 実験的な初期公開版です。現在はM5Stack BasicとMicroPythonを対象とし、macOSで動作確認しています。
+Kiro Stack Buddy connects a Kiro IDE workspace and an M5Stack Basic over **Bluetooth Low Energy (BLE)**. A local Bridge receives Kiro Hook events and sends the current activity state to the M5Stack. The M5Stack changes the Kiro character animation according to the state.
 
-## できること
+> **Status:** Experimental early release. Currently targets M5Stack Basic and MicroPython, and has been tested on macOS.
 
-- M5StackとはBLEで通信（HookからBridgeへはlocalhostのHTTPを使用し、Wi-Fiやクラウドサービスには依存しない）
-- `127.0.0.1:9876`で動作するローカルHTTP Bridge
-- 3つのKiro Hookによる状態連携
-  - `SessionStart` → 待機
-  - `UserPromptSubmit` → 作業中
-  - `Stop` → 完了
-- 状態に応じたKiroアニメーション
-  - `idle`: その場で小さく左右に揺れる
-  - `walk`: 作業中に画面内を左右へ移動する
-  - `look`: その場で左右を見る
-  - `completed`: 短時間上下に跳ねる
-- BLE/Bridgeの接続状態を表示
-- BLE切断時の自動再接続と最新状態の再送
-- 標準Hook経路では、プロンプト本文、ファイル内容、コマンド本文、token使用量、credit使用量、セッションIDをM5Stackへ送信しない
+## Features
 
-## システム構成
+- BLE communication with the M5Stack; Hooks communicate with the Bridge over localhost HTTP, without Wi-Fi or cloud services
+- Local HTTP Bridge listening on `127.0.0.1:9876`
+- State integration through three Kiro Hooks:
+  - `SessionStart` → idle
+  - `UserPromptSubmit` → in progress
+  - `Stop` → completed
+- State-based Kiro animations:
+  - `idle`: small side-to-side sway
+  - `walk`: moves across the screen while work is in progress
+  - `look`: looks from side to side in place
+  - `completed`: briefly bounces up and down
+- BLE/Bridge connection status display
+- Automatic BLE reconnection and latest-state resend
+- Through the standard Hook path, prompt text, file contents, command text, token usage, credit usage, and session IDs are not sent to the M5Stack
 
-Mac PC上でKiro IDEとPython製のBridgeサーバーを動かし、BridgeサーバーがM5Stack BasicとBLEで通信します。
+## System architecture
+
+Kiro IDE and the Python Bridge server run on the Mac. The Bridge server communicates with the M5Stack Basic over BLE.
 
 ```mermaid
 flowchart TB
@@ -36,42 +37,42 @@ flowchart TB
         Kiro -->|localhost HTTP| Bridge
     end
 
-    Bridge -->|BLE / NUS| M5["M5Stack Basic<br/>状態表示・アニメーション"]
+    Bridge -->|BLE / NUS| M5["M5Stack Basic<br/>State display and animation"]
 ```
 
-- **Kiro IDE**：`SessionStart`、`UserPromptSubmit`、`Stop`などのHookイベントを発生させます。
-- **Python Bridge Server**：Mac PCの`127.0.0.1:9876`でHTTPを待ち受け、Hookイベントを`idle`、`in_progress`、`completed`などの状態へ変換します。
-- **M5Stack Basic**：BridgeとBLEで接続し、受信した状態に応じてKiroの画像とアニメーションを表示します。
+- **Kiro IDE:** Generates Hook events such as `SessionStart`, `UserPromptSubmit`, and `Stop`.
+- **Python Bridge Server:** Listens on `127.0.0.1:9876` on the Mac and converts Hook events into states such as `idle`, `in_progress`, and `completed`.
+- **M5Stack Basic:** Connects to the Bridge over BLE and displays the Kiro image and animation for the received state.
 
-Kiro IDEからBridgeまではMac PC内のlocalhost HTTP、BridgeからM5StackまではBLEを使用します。インターネット上のサーバーやクラウドサービスは経由しません。
+Kiro IDE communicates with the Bridge over localhost HTTP on the Mac, and the Bridge communicates with the M5Stack over BLE. No Internet server or cloud service is involved.
 
-## 必要なハードウェア
+## Hardware requirements
 
 - M5Stack Basic / ESP32
-- ファームウェア転送用のUSBケーブル
-- Bluetooth Low Energyに対応したコンピューター
+- USB cable for firmware transfer
+- A computer with Bluetooth Low Energy support
 
-動作確認したファームウェア環境では、320×240のILI9342CディスプレイとMicroPython v1.25.0を使用しています。別のMicroPythonバージョンでの動作は未確認です。
+The tested firmware environment uses a 320×240 ILI9342C display and MicroPython v1.25.0. Other MicroPython versions have not been tested.
 
-## 必要なソフトウェア
+## Software requirements
 
-### ホストコンピューター
+### Host computer
 
 - Kiro IDE
-- Python 3.13以降
+- Python 3.13 or later
 - [`uv`](https://docs.astral.sh/uv/)
-- Bluetooth Low Energy対応
-- `mpremote`（このプロジェクトでは`uv sync`によってインストールされます）
+- Bluetooth Low Energy support
+- `mpremote` (installed by `uv sync` in this project)
 
-BridgeとHook連携はmacOSで動作確認済みです。LinuxとWindowsはまだ動作確認していません。ファームウェアのデプロイスクリプトはBashを使用するため、WindowsではWSLを使用するか、同等の`mpremote`コマンドを手動で実行してください。
+The Bridge and Hook integration have been tested on macOS. Linux and Windows have not been tested. The firmware deployment script uses Bash; on Windows, use WSL or run equivalent `mpremote` commands manually.
 
 ### M5Stack
 
-動作確認した環境では、M5Stack BasicへMicroPython v1.25.0をインストールしました。別のバージョンを使用する場合は、MicroPythonのBLE・GPIO・SPI APIとの互換性を確認してください。デプロイ中はM5StackをUSB接続します。
+The tested environment uses MicroPython v1.25.0 on an M5Stack Basic. If you use another version, verify compatibility with the MicroPython BLE, GPIO, and SPI APIs. Keep the M5Stack connected over USB during deployment.
 
-## インストール
+## Installation
 
-リポジトリをクローンし、ホスト側の依存関係をインストールします。
+Clone the repository and install the host dependencies:
 
 ```bash
 git clone <YOUR_REPOSITORY_URL>
@@ -79,25 +80,25 @@ cd kiroStack
 uv sync
 ```
 
-`<YOUR_REPOSITORY_URL>`は実際のGitHubリポジトリURLに置き換えてください。
+Replace `<YOUR_REPOSITORY_URL>` with the actual GitHub repository URL.
 
-### 1. 画像をローカルで変換する
+### 1. Convert a local image
 
-このリポジトリにはKiro画像を同梱していません。利用者自身が権利を確認した画像を用意し、ローカルでM5Stack用のBMPへ変換してください。スクリプトは外部URLから画像をダウンロードしません。
+This repository does not include a Kiro image. Prepare an image for which you have verified the usage rights, then convert it locally into M5Stack-compatible BMP files. The script does not download images from external URLs.
 
 ```bash
 uv run python scripts/prepare_assets.py \
   --input /path/to/your-image.png
 ```
 
-入力にはPNG、JPGなどPillowが読み込める画像を指定できます。スクリプトは画像を96×96へリサイズし、2値化して、次の2ファイルを生成します。
+You can provide PNG, JPG, or other formats supported by Pillow. The script resizes the image to 96×96, converts it to two colors, and generates:
 
 ```text
 firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-入力画像の明るさに合わない場合は、2値化の閾値を調整できます。
+If the input brightness does not produce a suitable result, adjust the threshold:
 
 ```bash
 uv run python scripts/prepare_assets.py \
@@ -105,19 +106,27 @@ uv run python scripts/prepare_assets.py \
   --threshold 100
 ```
 
-生成されたBMPはローカルで使用するためのファイルです。権利を確認していない画像をGitHubへcommitしたり、再配布したりしないでください。
+Generated BMP files are intended for local use. Do not commit or redistribute images whose rights you have not verified.
 
-### 2. ファームウェアをデプロイする
+### 2. Deploy the firmware
 
-M5Stackのシリアルポートを確認し、次のコマンドを実行します。
+Find the M5Stack serial port and pass it explicitly to the deployment script.
+
+macOS example:
 
 ```bash
 ./scripts/deploy.sh /dev/cu.usbserial-XXXX
 ```
 
-Linuxでは、ポート名が`/dev/ttyUSB0`や`/dev/ttyACM0`になる場合があります。
+Linux example:
 
-デプロイスクリプトは次のファイルをM5Stackへ転送します。
+```bash
+./scripts/deploy.sh /dev/ttyACM0
+```
+
+Replace the example with the actual serial port on your system.
+
+The deployment script transfers these files to the M5Stack:
 
 ```text
 firmware/ili9342c.py
@@ -126,88 +135,88 @@ firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-画像BMPが生成されていない場合、デプロイスクリプトはエラーを表示して停止します。転送後、スクリプトはM5Stackをリセットします。リセット後は、`KiroBuddy`としてBLE広告を開始できるよう、M5Stackの電源を入れたままにしてください。
+If the BMP files have not been generated, the deployment script stops with an error. It resets the M5Stack after transfer. Keep the M5Stack powered on so that it can advertise over BLE as `KiroBuddy`.
 
-### 3. BLE Bridgeを起動する
+### 3. Start the BLE Bridge
 
-リポジトリのルートディレクトリから、ローカルBridgeを起動します。
+From the repository root, start the local Bridge:
 
 ```bash
 ./scripts/run_bridge.sh
 ```
 
-または、次のコマンドでも起動できます。
+Alternatively:
 
 ```bash
 uv run kiro-buddy-bridge
 ```
 
-Bridgeは`http://127.0.0.1:9876`だけで待ち受け、M5StackをBLEで検索・接続し、接続後に最新状態を送信します。M5Stackが切断されると、自動的に再検索・再接続します。
+The Bridge listens only on `http://127.0.0.1:9876`, scans for and connects to the M5Stack over BLE, and sends the latest state after connection. It automatically scans and reconnects after a disconnect.
 
-macOSでBluetoothアクセスを求められた場合は許可してください。BridgeがM5Stackを検出できない場合は、M5Stackを再起動し、他のBLEクライアントが接続していないことを確認してください。
+On macOS, allow Bluetooth access if prompted. If the Bridge cannot find the M5Stack, restart the M5Stack and make sure no other BLE client is connected to it.
 
-### 4. Kiro Hookを有効にする
+### 4. Enable the Kiro Hooks
 
-このリポジトリには、ワークスペース用のHook設定が次の場所に含まれています。
+This repository includes the workspace Hook configuration at:
 
 ```text
 .kiro/hooks/buddy-state.json
 ```
 
-このファイルには、次の3つのKiro IDE Hookが定義されています。
+The file defines these three Kiro IDE Hooks:
 
-| Kiro Hook | HTTPイベント | デバイス状態 | アニメーション |
+| Kiro Hook | HTTP event | Device state | Animation |
 |---|---|---|---|
 | `SessionStart` | `session_start` | `idle` | `idle` |
 | `UserPromptSubmit` | `prompt_submit` | `in_progress` | `walk` |
 | `Stop` | `stop` | `completed` | `completed` |
 
-Kiro Hookのトリガー名はPascalCaseです。一方、ローカルBridgeへ送信するJSONイベント名はsnake_caseです。Hookの入力内容はBridgeへ転送しません。
+Hook trigger names use PascalCase, while the JSON event names sent to the local Bridge use snake_case. Hook input content is not forwarded to the Bridge.
 
-Hook通知をM5Stackへ届けるには、Bridgeが起動済みである必要があります。Hook設定を変更した場合は、Kiro側でワークスペースHookが再読み込みされていることを確認してください。
+The Bridge must be running for Hook notifications to reach the M5Stack. If you change the Hook configuration, make sure the workspace Hooks have been reloaded by Kiro.
 
-## 画面表示と状態
+## Display states
 
-| デバイス状態 | 表示 | アニメーション |
+| Device state | Display | Animation |
 |---|---|---|
-| BLE切断中 | `IDLE` + `BRIDGE OFFLINE` | `look` |
+| BLE disconnected | `IDLE` + `BRIDGE OFFLINE` | `look` |
 | `idle` | `IDLE` | `idle` |
 | `in_progress` | `WORKING` | `walk` |
 | `waiting_on_user` | `WAITING` | `look` |
-| `completed` | 約2秒間`DONE` | `completed` |
+| `completed` | `DONE` for about two seconds | `completed` |
 | `error` | `ERROR` | `look` |
 
-画面下部には、BLE/Bridge接続状態として`BLE: ON`または`BLE: OFF`と`BRIDGE CONNECTED`または`BRIDGE OFFLINE`を表示します。これらは同じBLEリンクの状態を示す表示です。
+The bottom of the display shows `BLE: ON` or `BLE: OFF` and `BRIDGE CONNECTED` or `BRIDGE OFFLINE`. Both labels represent the same BLE link state.
 
-完了アニメーションは意図的に短く設定しています。約2秒後、別の状態を受信していなければファームウェアは`IDLE`へ戻ります。Bridgeは最新状態を保持し、BLE再接続後に再送します。ファームウェアはBLE切断時に受信済みsequenceをリセットするため、同じスナップショットを再適用できます。
+The completion animation is intentionally brief. After about two seconds, the firmware returns to `IDLE` unless another state has been received. The Bridge keeps the latest state and resends it after a BLE reconnection. The firmware resets its received sequence on disconnect so the same snapshot can be applied again.
 
-### ボタン操作
+### Button controls
 
-- **ボタンB:** テスト用アニメーションを次の順番で切り替えます。
+- **Button B:** Cycles through the test animation patterns:
 
   ```text
   idle → walk → look → completed → idle
   ```
 
-- **ボタンA/C:** BLE接続中に、テスト用の状態を次の順番で切り替えます。
+- **Buttons A/C:** While BLE is connected, cycles through test states:
 
   ```text
   idle → in_progress → waiting_on_user → completed → idle
   ```
 
-  BLE未接続時は、メインループの接続状態処理によって`offline`表示へ戻ります。`error`はボタンテストの対象外です。
+  When BLE is disconnected, the main loop returns the display to `offline`. The `error` state is not included in button testing.
 
-ボタンによるテストはファームウェア内だけで完結し、KiroやBridgeへイベントを送信しません。
+Button testing is handled entirely by the firmware and does not send events to Kiro or the Bridge.
 
-## Bridgeの手動テスト
+## Manual Bridge testing
 
-Bridgeの状態を確認します。
+Check the Bridge status:
 
 ```bash
 curl http://127.0.0.1:9876/status
 ```
 
-Kiroの依頼開始をシミュレートします。
+Simulate the start of a Kiro request:
 
 ```bash
 curl -X POST http://127.0.0.1:9876/event \
@@ -215,7 +224,7 @@ curl -X POST http://127.0.0.1:9876/event \
   -d '{"event":"prompt_submit"}'
 ```
 
-Kiroのターン完了をシミュレートします。
+Simulate the end of a Kiro turn:
 
 ```bash
 curl -X POST http://127.0.0.1:9876/event \
@@ -223,17 +232,17 @@ curl -X POST http://127.0.0.1:9876/event \
   -d '{"event":"stop"}'
 ```
 
-期待されるデバイスの状態遷移は次のとおりです。
+Expected device state transition:
 
 ```text
 WORKING → DONE → IDLE
 ```
 
-## BLEプロトコル
+## BLE protocol
 
-Bridgeとファームウェアは、Nordic UART Service（NUS）上で改行区切りのUTF-8 JSONを使って通信します。
+The Bridge and firmware communicate over the Nordic UART Service (NUS) using newline-delimited UTF-8 JSON.
 
-状態メッセージの例：
+Example state message:
 
 ```json
 {
@@ -246,11 +255,11 @@ Bridgeとファームウェアは、Nordic UART Service（NUS）上で改行区�
 }
 ```
 
-BridgeはBLE書き込みを20バイト単位に分割します。M5Stackは新しい有効な状態メッセージを受け付けるとACKを返します。無効なJSONやsequenceにはエラー通知を返し、古いsequenceは無視します。ファームウェアは同じ接続中に適用済みのsequenceを無視し、BLE切断時にsequenceをリセットします。
+The Bridge splits BLE writes into 20-byte chunks. The M5Stack sends an ACK when it accepts a new, valid state message. Invalid JSON or sequence values produce an error notification, and older sequences are ignored. The firmware ignores an already-applied sequence during the same connection and resets the sequence on BLE disconnect.
 
-## 開発・検証
+## Development and validation
 
-リポジトリのルートディレクトリから、ホスト側のチェックを実行できます。
+From the repository root, run the host-side checks:
 
 ```bash
 python3 -m py_compile firmware/main.py
@@ -262,85 +271,83 @@ python3 -c 'import json, pathlib; p=pathlib.Path(".kiro/hooks/buddy-state.json")
 git diff --check
 ```
 
-スタンドアロンBLEテストクライアントは、`in_progress`状態をM5Stackへ直接送信します。
+The standalone BLE test client sends the `in_progress` state directly to the M5Stack:
 
 ```bash
 uv run python scripts/ble_test_client.py
 ```
 
-このテストクライアントはKiro Hookの処理とは独立しています。BLE検出、接続、JSON受信、ACKの動作確認に利用できます。
+This test client is independent of Kiro Hook processing and can be used to test BLE discovery, connection, JSON reception, and ACK behavior.
 
-## リポジトリ構成
+## Repository layout
 
 ```text
 kiroStack/
-├── .kiro/hooks/buddy-state.json       # Kiro IDE Hook設定
+├── .kiro/hooks/buddy-state.json       # Kiro IDE Hook configuration
 ├── bridge/
 │   ├── __init__.py
-│   └── server.py                      # ローカルHTTP + BLE Bridge
+│   └── server.py                      # Local HTTP + BLE Bridge
 ├── documents/
-│   ├── kiro-buddy-development.md     # 開発記録
-│   └── kiro-buddy-development2.md    # 続編の開発記録
+│   ├── kiro-buddy-development.md     # Development notes
+│   └── kiro-buddy-development2.md    # Follow-up development notes
 ├── firmware/
-│   ├── main.py                        # 表示、BLE Peripheral、アニメーション
-│   ├── ili9342c.py                    # ILI9342C LCDドライバ
-│   └── assets/                        # 利用者がローカル生成する画像素材
+│   ├── main.py                        # Display, BLE peripheral, animation
+│   ├── ili9342c.py                    # ILI9342C LCD driver
+│   └── assets/                        # Locally generated user image assets
 ├── scripts/
-│   ├── ble_test_client.py             # スタンドアロンBLEテストクライアント
-│   ├── deploy.sh                      # ファームウェアデプロイ
-│   ├── prepare_assets.py              # ローカル画像のBMP変換
-│   └── run_bridge.sh                  # Bridge起動ヘルパー
+│   ├── ble_test_client.py             # Standalone BLE test client
+│   ├── deploy.sh                      # Firmware deployment
+│   ├── prepare_assets.py              # Local image-to-BMP conversion
+│   └── run_bridge.sh                  # Bridge startup helper
 ├── pyproject.toml
 ├── uv.lock
 ├── LICENSE
-└── README.md
+├── README.md
+└── README.ja.md
 ```
 
-## プライバシーと対象範囲
+## Privacy and scope
 
-Kiro Stack Buddyは、ローカルで作業状態だけを表示するためのプロジェクトです。標準Hook経路では、ローカルBridgeからM5Stackへ、`idle`、`in_progress`、`completed`などの正規化された状態をBLEで送信します。Bridgeにはデバッグ用の`/send`エンドポイントもあり、任意のJSONを送信できるため、機密情報を含むデータは送らないでください。BLE接続時には状態とは別に時刻同期メッセージも送信します。
+Kiro Stack Buddy is a local project for displaying activity state. Through the standard Hook path, the local Bridge sends normalized states such as `idle`, `in_progress`, and `completed` to the M5Stack over BLE. The Bridge also provides a debug `/send` endpoint that can send arbitrary JSON, so do not send sensitive data through it. A separate time synchronization message is also sent when the BLE connection is established.
 
-標準Hook経路では、次の情報をM5Stackへ送信・表示しません。
+Through the standard Hook path, the following information is not sent to or displayed on the M5Stack:
 
-- プロンプト本文
-- ファイル名やファイル内容
-- コマンド本文
-- token使用量やcredit使用量
-- セッションID
-- 詳細ログ
+- Prompt text
+- File names or file contents
+- Command text
+- Token or credit usage
+- Session IDs
+- Detailed logs
 
-Bridgeはループバックアドレス（`127.0.0.1`）でのみ待ち受け、インターネットへ公開するHTTPサーバーではありません。BLEは現在認証されていないため、周囲からのBLEアクセスが問題になる環境では使用しないでください。
+The Bridge listens only on the loopback address (`127.0.0.1`) and is not an Internet-facing HTTP server. BLE is currently unauthenticated; do not use it in environments where nearby BLE access is a concern.
 
-## 第三者アセットと商標
+## Third-party assets and trademarks
 
-画像の取得元や利用条件は利用者自身で確認してください。例えば、[LobeHubのKiroアイコンページ](https://lobehub.com/icons/kiro)から取得した画像を使う場合、RGB565 BMPへ変換しても元画像やKiro商標に関する権利は消滅しません。
+Check the source and usage terms of any image you provide. For example, if you use an image obtained from the [LobeHub Kiro icon page](https://lobehub.com/icons/kiro), converting it to an RGB565 BMP does not remove rights associated with the original image or the Kiro trademark.
 
-- [LobeHubの`lobe-icons`リポジトリ](https://github.com/lobehub/lobe-icons)はMIT Licenseで公開されています。
-- LobeHubのアイコンページには、画像が著作権で保護されている可能性がある旨が記載されています。
-- KiroはAWSの商標です。詳細は[AWS Trademark Guidelines](https://aws.amazon.com/trademark-guidelines/)を確認してください。
+- Kiro is an AWS trademark. See the [AWS Trademark Guidelines](https://aws.amazon.com/trademark-guidelines/).
 
-LobeHubソフトウェアリポジトリのMITライセンスは、Kiro商標や元画像を改変・再配布できることの確認として解釈しないでください。本プロジェクトは非公式であり、AWSまたはKiroとは提携・承認関係にありません。
+This is an unofficial project and is not affiliated with or endorsed by AWS or Kiro.
 
-権利を確認していない画像をGitHubへcommitしたり、他人へ再配布したりしないでください。画像の利用条件は利用者の責任で確認してください。
+Do not commit or redistribute images whose rights you have not verified. Users are responsible for checking the terms for their chosen images.
 
-## 既知の制限
+## Known limitations
 
-- 動作確認済みのハードウェアはM5Stack Basicのみです。
-- 動作確認済みのホストOSはmacOSのみです。
-- Kiro IDE Hookが必要です。他のエディター用の汎用アクティビティモニターではありません。
-- `waiting_on_user`と`error`はプロトコルに実装されていますが、現在の標準3 Hookからは生成されません。
-- ファームウェアデプロイスクリプトにはUnix系シェルが必要です。
+- Only M5Stack Basic has been tested.
+- Only macOS has been tested as the host OS.
+- Kiro IDE Hooks are required; this is not a generic activity monitor for other editors.
+- `waiting_on_user` and `error` are implemented in the protocol but are not generated by the current standard three Hooks.
+- The firmware deployment script requires a Unix-like shell.
 
+## License
 
-## ライセンス
+The original source code and related documentation in this repository are released under the MIT License. See [`LICENSE`](LICENSE).
 
-本リポジトリのオリジナルソースコードおよび関連ドキュメントは、MIT Licenseで公開します。詳細は[`LICENSE`](LICENSE)を参照してください。
+The MIT License applies to the original code and related documentation in this repository. It does not apply to:
 
-MIT Licenseは、本リポジトリに含まれるオリジナルコードと関連ドキュメントに適用されます。以下はこのライセンスの対象外です。
+- Images provided by users
+- Images or assets provided by third parties
+- Names, logos, and trademarks such as Kiro, AWS, and M5Stack
+- Dependencies and external software such as Pillow, Bleak, aiohttp, and mpremote
 
-- 利用者が用意する画像
-- 第三者が提供する画像やアセット
-- Kiro、AWS、M5Stackなどの名称、ロゴ、商標
-- Pillow、Bleak、aiohttp、mpremoteなどの依存ライブラリおよび外部ソフトウェア
-
-第三者のアセットや商標を利用する場合は、それぞれの権利者が定める利用条件を確認してください。KiroおよびAWS関連の名称・商標は、それぞれの権利者に帰属します。
+Check the terms set by the respective rights holders when using third-party assets or trademarks. Kiro and AWS-related names and trademarks belong to their respective rights holders.

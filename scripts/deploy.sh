@@ -1,10 +1,17 @@
 #!/bin/bash
 # M5Stack Basicにファームウェアをデプロイするスクリプト
-# 使い方: ./scripts/deploy.sh [シリアルポート]
+# 使い方: ./scripts/deploy.sh /dev/cu.usbserial-XXXX
 
 set -e
 
-PORT="${1:-/dev/cu.usbserial-01BB96F8}"
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+    echo "エラー: シリアルポートを指定してください"
+    echo "使い方: ./scripts/deploy.sh /dev/cu.usbserial-XXXX"
+    echo "例（Linux）: ./scripts/deploy.sh /dev/ttyACM0"
+    exit 1
+fi
+
+PORT="$1"
 ASSET_DIR="firmware/assets"
 RIGHT_ASSET="$ASSET_DIR/kiro_bw_96x96.bmp"
 LEFT_ASSET="$ASSET_DIR/kiro_bw_96x96_left.bmp"
