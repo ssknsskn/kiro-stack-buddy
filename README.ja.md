@@ -1,5 +1,7 @@
 # Kiro Stack Buddy
 
+![Kiro Stack Buddy overview](kiroStackBuddy_topImage.jpeg)
+
 [English](README.md) | 日本語
 
 Kiro IDEの作業状態をM5Stack Basicに表示する、デバイスプロジェクトです。
@@ -12,8 +14,6 @@ PC画面ばかり見ずに、たまには物理世界にあるデバイス上で
 
 ## できること
 
-- M5StackとはBLEで通信（HookからBridgeへはlocalhostのHTTPを使用し、Wi-Fiやクラウドサービスには依存しない）
-- `127.0.0.1:9876`で動作するローカルHTTP Bridge
 - 3つのKiro Hookによる状態連携
   - `SessionStart` → 待機
   - `UserPromptSubmit` → 作業中
@@ -23,10 +23,10 @@ PC画面ばかり見ずに、たまには物理世界にあるデバイス上で
   - `walk`: 右端に突然現れ、その場で左右を向く。左右に歩いたあと、消えて、左端に再び現れる。同じような動作を繰り返す。
   - `look`: その場で左右を見る
   - `completed`: 短時間上下に跳ねる
-- Kiro画像は24×24の論理ピクセルへ変換し、最近傍補間で96×96へ拡大して、論理ピクセル間に1pxの黒い格子を入れて表示する
 - `IDLE`、`WORKING`、`DONE`などの状態ラベルは、既存のテキスト描画のまま表示する
 - BLE/Bridgeの接続状態を表示
 - BLE切断時の自動再接続と最新状態の再送
+- M5StackとはBLEで通信（HookからBridgeへはlocalhostのHTTPを使用し、Wi-Fiやクラウドサービスには依存しない）
 - 標準Hook経路では、プロンプト本文、ファイル内容、コマンド本文、token使用量、credit使用量、セッションIDをM5Stackへ送信しない
 
 ## アニメーション表示
@@ -108,7 +108,7 @@ uv sync
 
 ### 1. 同梱アセットを確認する
 
-KiroのピクセルアートBMPはリポジトリに同梱済みです。clone後に画像を取得・変換する必要はありません。`uv sync`の完了後、シリアルポートを指定してそのままデプロイできます。
+KiroのピクセルアートBMPはリポジトリに同梱済みです。`uv sync`の完了後、シリアルポートを指定してそのままデプロイできます。
 
 同梱されているアセットは次の2ファイルです。
 
@@ -117,7 +117,7 @@ firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-ピクセルアート化されるのはKiro画像だけで、`IDLE`、`WORKING`、`DONE`などの状態ラベルは既存のテキスト描画のままです。
+ピクセルアート化されるのはKiro画像だけで、`IDLE`、`WORKING`、`DONE`などの状態ラベルはテキスト描画のままです。
 
 #### 独自画像を使う場合（任意）
 
@@ -161,7 +161,7 @@ firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-同梱BMPが存在しない場合、デプロイスクリプトはエラーを表示して停止します。リポジトリを正しくcloneしたか、`firmware/assets/`の2ファイルを確認してください。転送後、スクリプトはM5Stackをリセットします。リセット後は、`KiroBuddy`としてBLEのadvertiseを開始できるよう、M5Stackの電源を入れたままにしてください。
+同梱BMPが存在しない場合、デプロイスクリプトはエラーを表示して停止します。リポジトリを正しくcloneしたか、`firmware/assets/`の2ファイルを確認してください。転送後、スクリプトはM5Stackをリセットします。リセット後は、BLEのadvertiseを開始できるよう、M5Stackの電源を入れたままにしてください。
 
 ### 3. BLE Bridgeを起動する
 
@@ -214,7 +214,6 @@ Hook通知をM5Stackへ届けるには、Bridgeが起動済みである必要が
 
 画面下部には、BLE/Bridge接続状態として`BLE: ON`または`BLE: OFF`と`BRIDGE CONNECTED`または`BRIDGE OFFLINE`を表示します。これらは同じBLEリンクの状態を示す表示です。
 
-完了アニメーションは意図的に短く設定しています。約2秒後、別の状態を受信していなければファームウェアは`IDLE`へ戻ります。Bridgeは最新状態を保持し、BLE再接続後に再送します。ファームウェアはBLE切断時に受信済みsequenceをリセットするため、同じスナップショットを再適用できます。
 
 ### ボタン操作
 
