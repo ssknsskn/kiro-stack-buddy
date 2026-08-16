@@ -82,6 +82,7 @@ SCREEN_WIDTH = 320
 WALK_STEPS = 5
 WALK_STEP_PIXELS = 12
 WALK_STEP_FRAMES = 1
+WALK_FRAME_INTERVAL_MS = 70
 WALK_HIDDEN_FRAMES = 1
 WALK_LOOK_FRAMES = 4  # 出現後のキョロキョロ
 WALK_SEQUENCE_FRAMES = (
@@ -548,57 +549,11 @@ class KiroBuddy:
             self.lcd.fill_rect(overlap_right, middle_top, old_right - overlap_right, middle_height, BLACK)
 
     def _draw_kiro_transition(self):
-        """黒背景と新Kiroを小さな1行バッファで一括更新"""
-        old_left = int(self.anim_x_prev)
-        old_top = int(self.anim_y_prev)
-        new_left = int(self.anim_x)
-        new_top = int(self.anim_y)
-
-        # 旧位置と新位置を含む最小領域だけを更新する
-        left = min(old_left, new_left)
-        top = min(old_top, new_top)
-        right = max(old_left + 96, new_left + 96)
-        bottom = max(old_top + 96, new_top + 96)
-        region_width = right - left
-        region_height = bottom - top
-        x_offset = new_left - left
-        y_offset = new_top - top
-
-        # 出現位置への大きなジャンプでは1行バッファに収まらないため、
-        # 旧画像を消してから新画像を描画する。
-        if region_width * 2 > len(self.transition_row):
-            if self.anim_visible_prev:
-                self.lcd.fill_rect(old_left, old_top, IMAGE_SIZE, IMAGE_SIZE, BLACK)
-            if self.anim_visible:
-                self._draw_kiro()
-            return
-
-        # 新しいKiroの画像データ
-        bmp_data = self.bmp_left if self.facing_left else self.bmp_right
-        row_bytes = IMAGE_SIZE * 2
-        output_row_bytes = region_width * 2
-
-        lcd = self.lcd
-        lcd._set_window(left, top, right - 1, bottom - 1)
-        lcd.cs.value(0)
-        lcd.dc.value(1)
-
-        for row in range(region_height):
-            # 行全体を黒にする。旧フレームの白はここで確実に消える。
-            for index in range(output_row_bytes):
-                self.transition_row[index] = 0
-
-            source_row = row - y_offset
-            if 0 <= source_row < 96:
-                source_start = source_row * row_bytes
-                target_start = x_offset * 2
-                self.transition_row[target_start:target_start + row_bytes] = (
-                    bmp_data[source_start:source_start + row_bytes]
-                )
-
-            lcd.spi.write(self.transition_row_view[:output_row_bytes])
-
-        lcd.cs.value(1)
+        """新しいKiroを先に描画し、旧位置の露出部分を後から消去する"""
+        if self.anim_visible:
+            self._draw_kiro()
+        if self.anim_visible_prev:
+            self._clear_exposed_previous_kiro()
 
     def _draw(self):
         """LCD描画"""
@@ -697,9 +652,14 @@ class KiroBuddy:
             self._update_ble_state()
             self._check_buttons()
 
-            # 50msごとにアニメーションと描画を更新
+            # 状態に応じた間隔でアニメーションと描画を更新
             now = time.ticks_ms()
-            if time.ticks_diff(now, self.last_update) > 50:
+            update_interval = (
+                WALK_FRAME_INTERVAL_MS
+                if self.animation_pattern == ANIM_WALK
+                else 50
+            )
+            if time.ticks_diff(now, self.last_update) > update_interval:
                 self.last_update = now
                 self.anim_frame += 1
                 self._update_animation()
