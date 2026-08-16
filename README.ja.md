@@ -29,6 +29,26 @@ PC画面ばかり見ずに、たまには物理世界にあるデバイス上で
 - BLE切断時の自動再接続と最新状態の再送
 - 標準Hook経路では、プロンプト本文、ファイル内容、コマンド本文、token使用量、credit使用量、セッションIDをM5Stackへ送信しない
 
+## アニメーション表示
+
+M5Stackでは、Kiroの状態に応じて次のアニメーションを表示します。
+
+### IDLE
+
+![IDLEアニメーション](assets/idle-animation.gif)
+
+### WORKING
+
+![WORKINGアニメーション](assets/working-animation.gif)
+
+### DONE
+
+![DONEアニメーション](assets/done-animation.gif)
+
+### BRIDGE OFFLINE
+
+![BRIDGE OFFLINEアニメーション](assets/look-animation.gif)
+
 ## システム構成
 
 Mac PC上でKiro IDEとPython製のBridgeサーバーを動かし、BridgeサーバーがM5Stack BasicとBLEで通信します。
@@ -193,24 +213,6 @@ Hook通知をM5Stackへ届けるには、Bridgeが起動済みである必要が
 | `error` | `ERROR` | `look` |
 
 画面下部には、BLE/Bridge接続状態として`BLE: ON`または`BLE: OFF`と`BRIDGE CONNECTED`または`BRIDGE OFFLINE`を表示します。これらは同じBLEリンクの状態を示す表示です。
-
-### アニメーション例
-
-#### IDLE
-
-![IDLEアニメーション](assets/idle-animation.gif)
-
-#### WORKING
-
-![WORKINGアニメーション](assets/working-animation.gif)
-
-#### DONE
-
-![DONEアニメーション](assets/done-animation.gif)
-
-#### BRIDGE OFFLINE
-
-![BRIDGE OFFLINEアニメーション](assets/look-animation.gif)
 
 完了アニメーションは意図的に短く設定しています。約2秒後、別の状態を受信していなければファームウェアは`IDLE`へ戻ります。Bridgeは最新状態を保持し、BLE再接続後に再送します。ファームウェアはBLE切断時に受信済みsequenceをリセットするため、同じスナップショットを再適用できます。
 

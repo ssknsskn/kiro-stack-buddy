@@ -29,6 +29,26 @@ Kiro Stack Buddy connects a Kiro IDE workspace and an M5Stack Basic over **Bluet
 - Automatic BLE reconnection and latest-state resend
 - Through the standard Hook path, prompt text, file contents, command text, token usage, credit usage, and session IDs are not sent to the M5Stack
 
+## Animation previews
+
+The M5Stack displays the following animations for each activity state.
+
+### IDLE
+
+![IDLE animation](assets/idle-animation.gif)
+
+### WORKING
+
+![WORKING animation](assets/working-animation.gif)
+
+### DONE
+
+![DONE animation](assets/done-animation.gif)
+
+### BRIDGE OFFLINE
+
+![BRIDGE OFFLINE animation](assets/look-animation.gif)
+
 ## System architecture
 
 Kiro IDE and the Python Bridge server run on the Mac. The Bridge server communicates with the M5Stack Basic over BLE.
@@ -193,24 +213,6 @@ The Bridge must be running for Hook notifications to reach the M5Stack. If you c
 | `error` | `ERROR` | `look` |
 
 The bottom of the display shows `BLE: ON` or `BLE: OFF` and `BRIDGE CONNECTED` or `BRIDGE OFFLINE`. Both labels represent the same BLE link state.
-
-### Animation previews
-
-#### IDLE
-
-![IDLE animation](assets/idle-animation.gif)
-
-#### WORKING
-
-![WORKING animation](assets/working-animation.gif)
-
-#### DONE
-
-![DONE animation](assets/done-animation.gif)
-
-#### BRIDGE OFFLINE
-
-![BRIDGE OFFLINE animation](assets/look-animation.gif)
 
 The completion animation is intentionally brief. After about two seconds, the firmware returns to `IDLE` unless another state has been received. The Bridge keeps the latest state and resends it after a BLE reconnection. The firmware resets its received sequence on disconnect so the same snapshot can be applied again.
 
