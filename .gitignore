@@ -12,9 +12,14 @@ wheels/
 # Virtual environments
 .venv/
 
-# Generated local firmware image assets
+# Generated firmware image assets
 firmware/assets/*
 !firmware/assets/.gitkeep
+!firmware/assets/kiro_bw_96x96.bmp
+!firmware/assets/kiro_bw_96x96_left.bmp
+
+# Local source image used to generate the public pixel-art assets
+documents/kiro.png
 
 # Firmware binaries (large files)
 firmware/bin/*.bin

@@ -24,9 +24,8 @@ fi
 
 for asset in "$RIGHT_ASSET" "$LEFT_ASSET"; do
     if [ ! -f "$asset" ]; then
-        echo "エラー: 画像アセットがありません: $asset"
-        echo "先に次のコマンドでユーザー提供画像から生成してください:"
-        echo "  uv run python scripts/prepare_assets.py --input /path/to/your-image.png"
+        echo "エラー: 同梱アセットがありません: $asset"
+        echo "リポジトリを正しくcloneしたか、firmware/assets/のファイルを確認してください。"
         exit 1
     fi
 done
