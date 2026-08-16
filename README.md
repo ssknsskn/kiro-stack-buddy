@@ -194,6 +194,24 @@ The Bridge must be running for Hook notifications to reach the M5Stack. If you c
 
 The bottom of the display shows `BLE: ON` or `BLE: OFF` and `BRIDGE CONNECTED` or `BRIDGE OFFLINE`. Both labels represent the same BLE link state.
 
+### Animation previews
+
+#### IDLE
+
+![IDLE animation](assets/idle-animation.gif)
+
+#### WORKING
+
+![WORKING animation](assets/working-animation.gif)
+
+#### DONE
+
+![DONE animation](assets/done-animation.gif)
+
+#### BRIDGE OFFLINE
+
+![BRIDGE OFFLINE animation](assets/look-animation.gif)
+
 The completion animation is intentionally brief. After about two seconds, the firmware returns to `IDLE` unless another state has been received. The Bridge keeps the latest state and resends it after a BLE reconnection. The firmware resets its received sequence on disconnect so the same snapshot can be applied again.
 
 ### Button controls

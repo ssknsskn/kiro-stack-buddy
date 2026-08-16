@@ -60,7 +60,7 @@ STATE_LABELS = {
     STATE_WAITING_ON_USER: "WAITING",
     STATE_COMPLETED: "DONE",
     STATE_ERROR: "ERROR",
-    STATE_OFFLINE: "IDLE",
+    STATE_OFFLINE: "BRIDGE OFFLINE",
 }
 
 # テスト用アニメーションパターン
@@ -118,6 +118,7 @@ class KiroBuddy:
         self.pending_state = None
         self.current_sequence = -1
         self.completed_until = None
+        self._drawn_status_key = None
 
         # BLE状態
         self.ble = None
@@ -642,8 +643,16 @@ class KiroBuddy:
 
         # 最小限の状態表示。詳細なログやcredit/tokenは表示しない。
         color = STATE_COLORS.get(self.pet_state, WHITE)
-        status_text = (STATE_LABELS.get(self.pet_state, "IDLE") + "       ")[:7]
-        lcd.text_bg(status_text, 10, 150, color, BLACK, 2)
+        status_label = STATE_LABELS.get(self.pet_state, "IDLE")
+        status_text = (
+            status_label if self.pet_state == STATE_OFFLINE
+            else (status_label + "       ")[:7]
+        )
+        status_key = (status_text, color)
+        if status_key != self._drawn_status_key:
+            lcd.fill_rect(10, 150, 240, 16, BLACK)
+            lcd.text_bg(status_text, 10, 150, color, BLACK, 2)
+            self._drawn_status_key = status_key
 
         bridge_text = (("BRIDGE CONNECTED" if self.ble_link_connected else "BRIDGE OFFLINE") + "                ")[:16]
         bridge_color = GREEN if self.ble_link_connected else GRAY
