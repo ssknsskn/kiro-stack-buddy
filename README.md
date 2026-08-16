@@ -23,6 +23,8 @@ Kiro Stack Buddy connects a Kiro IDE workspace and an M5Stack Basic over **Bluet
   - `walk`: moves across the screen while work is in progress
   - `look`: looks from side to side in place
   - `completed`: briefly bounces up and down
+- The Kiro image is rendered as 24×24 logical pixels, enlarged to 96×96 with nearest-neighbor scaling, and separated by a 1px black grid
+- Status labels such as `IDLE`, `WORKING`, and `DONE` keep the existing text rendering
 - BLE/Bridge connection status display
 - Automatic BLE reconnection and latest-state resend
 - Through the standard Hook path, prompt text, file contents, command text, token usage, credit usage, and session IDs are not sent to the M5Stack
@@ -84,31 +86,33 @@ uv sync
 
 Replace `<YOUR_REPOSITORY_URL>` with the actual GitHub repository URL.
 
-### 1. Convert a local image
+### 1. Included assets
 
-This repository does not include a Kiro image. Prepare an image for which you have verified the usage rights, then convert it locally into M5Stack-compatible BMP files. The script does not download images from external URLs.
+The Kiro pixel-art BMP files are included in the repository. After cloning and running `uv sync`, no image download or conversion is required; deploy directly by providing the M5Stack serial port.
 
-```bash
-uv run python scripts/prepare_assets.py \
-  --input /path/to/your-image.png
-```
-
-You can provide PNG, JPG, or other formats supported by Pillow. The script resizes the image to 96×96, converts it to two colors, and generates:
+The included assets are:
 
 ```text
 firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-If the input brightness does not produce a suitable result, adjust the threshold:
+Only the Kiro image is pixelated. Status labels such as `IDLE`, `WORKING`, and `DONE` keep the firmware's existing text rendering.
+
+#### Optional: use a custom image
+
+If you want to use a custom image, prepare one for which you have verified the usage rights and convert it locally into M5Stack-compatible BMP files. The script does not download images from external URLs.
 
 ```bash
 uv run python scripts/prepare_assets.py \
   --input /path/to/your-image.png \
-  --threshold 100
+  --logical-size 24 \
+  --pixel-gap 1
 ```
 
-Generated BMP files are intended for local use. Do not commit or redistribute images whose rights you have not verified.
+You can provide PNG, JPG, or other formats supported by Pillow. The image is converted into 24×24 logical pixels and enlarged to 96×96 with nearest-neighbor scaling. `--logical-size` must divide 96. `--pixel-gap 0` removes the black gap between logical pixels. If the source Kiro image is black on a light or transparent background, add `--invert` to output a white Kiro on a black background. If the brightness is unsuitable, adjust the threshold with an option such as `--threshold 100`.
+
+Do not commit or redistribute custom BMP files or images whose rights you have not verified.
 
 ### 2. Deploy the firmware
 

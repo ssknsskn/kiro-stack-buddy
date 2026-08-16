@@ -6,10 +6,12 @@ import argparse
 import struct
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 DEFAULT_OUTPUT_DIR = Path("firmware/assets")
 DEFAULT_SIZE = 96
+DEFAULT_LOGICAL_SIZE = 24
+DEFAULT_PIXEL_GAP = 1
 DEFAULT_THRESHOLD = 128
 
 
@@ -35,6 +37,29 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_THRESHOLD,
         help=f"2値化の閾値 0-255（既定値: {DEFAULT_THRESHOLD}）",
+    )
+    parser.add_argument(
+        "--logical-size",
+        type=int,
+        default=DEFAULT_LOGICAL_SIZE,
+        help=(
+            "ピクセルアートの論理サイズ（既定値: "
+            f"{DEFAULT_LOGICAL_SIZE}、96の約数）"
+        ),
+    )
+    parser.add_argument(
+        "--pixel-gap",
+        type=int,
+        default=DEFAULT_PIXEL_GAP,
+        help=(
+            "論理ピクセル間に入れる黒い隙間の幅（既定値: "
+            f"{DEFAULT_PIXEL_GAP}px）"
+        ),
+    )
+    parser.add_argument(
+        "--invert",
+        action="store_true",
+        help="白黒を反転し、黒いKiroを白いKiroとして出力する",
     )
     return parser.parse_args()
 
@@ -84,15 +109,70 @@ def write_rgb565_bmp(image: Image.Image, output_path: Path) -> None:
             output.write(row)
 
 
-def prepare_image(input_path: Path, output_dir: Path, threshold: int) -> None:
-    """入力画像から右向き・左向きの96x96 BMPを生成する。"""
+def pixelate_image(
+    image: Image.Image,
+    output_size: int,
+    logical_size: int,
+    threshold: int,
+    pixel_gap: int,
+    invert: bool,
+) -> Image.Image:
+    """画像を論理ピクセル化し、RGB画像として96x96へ拡大する。"""
+    if output_size % logical_size != 0:
+        raise ValueError("--logical-sizeは96の約数で指定してください")
+
+    block_size = output_size // logical_size
+    if not 0 <= pixel_gap < block_size:
+        raise ValueError("--pixel-gapは0以上で、1ブロック未満で指定してください")
+
+    logical = image.resize(
+        (logical_size, logical_size),
+        Image.Resampling.NEAREST,
+    ).point(
+        lambda value: (
+            255
+            if (value >= threshold) != invert
+            else 0
+        ),
+        mode="1",
+    ).convert("RGB")
+
+    pixelated = Image.new("RGB", (output_size, output_size), (0, 0, 0))
+    draw = ImageDraw.Draw(pixelated)
+    cell_size = block_size - pixel_gap
+
+    for logical_y in range(logical_size):
+        for logical_x in range(logical_size):
+            if logical.getpixel((logical_x, logical_y))[0] < 128:
+                continue
+            left = logical_x * block_size
+            top = logical_y * block_size
+            draw.rectangle(
+                (left, top, left + cell_size - 1, top + cell_size - 1),
+                fill=(255, 255, 255),
+            )
+
+    return pixelated
+
+
+def prepare_image(
+    input_path: Path,
+    output_dir: Path,
+    threshold: int,
+    logical_size: int = DEFAULT_LOGICAL_SIZE,
+    pixel_gap: int = DEFAULT_PIXEL_GAP,
+    invert: bool = False,
+) -> None:
+    """入力画像から右向き・左向きのピクセルアートBMPを生成する。"""
     size = DEFAULT_SIZE
     if not input_path.is_file():
         raise FileNotFoundError(f"入力画像が見つかりません: {input_path}")
     if size <= 0:
-        raise ValueError("--sizeは1以上で指定してください")
+        raise ValueError("出力サイズは1以上で指定してください")
     if not 0 <= threshold <= 255:
         raise ValueError("--thresholdは0から255の範囲で指定してください")
+    if logical_size <= 0:
+        raise ValueError("--logical-sizeは1以上で指定してください")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -101,26 +181,39 @@ def prepare_image(input_path: Path, output_dir: Path, threshold: int) -> None:
         rgba = source.convert("RGBA")
         white_background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
         composited = Image.alpha_composite(white_background, rgba).convert("L")
-        resized = composited.resize((size, size), Image.Resampling.LANCZOS)
-        binary = resized.point(
-            lambda value: 0 if value < threshold else 255,
-            mode="1",
-        ).convert("RGB")
+        pixelated = pixelate_image(
+            composited,
+            size,
+            logical_size,
+            threshold,
+            pixel_gap,
+            invert,
+        )
 
     right_path = output_dir / "kiro_bw_96x96.bmp"
     left_path = output_dir / "kiro_bw_96x96_left.bmp"
-    write_rgb565_bmp(binary, right_path)
-    write_rgb565_bmp(binary.transpose(Image.Transpose.FLIP_LEFT_RIGHT), left_path)
+    write_rgb565_bmp(pixelated, right_path)
+    write_rgb565_bmp(pixelated.transpose(Image.Transpose.FLIP_LEFT_RIGHT), left_path)
 
     print(f"生成完了: {right_path}")
     print(f"生成完了: {left_path}")
-    print(f"サイズ: {size}x{size}, 閾値: {threshold}")
+    print(
+        f"サイズ: {size}x{size}, 論理ピクセル: {logical_size}x{logical_size}, "
+        f"隙間: {pixel_gap}px, 閾値: {threshold}"
+    )
 
 
 def main() -> None:
     """エントリポイント。"""
     args = parse_args()
-    prepare_image(args.input, args.output_dir, args.threshold)
+    prepare_image(
+        args.input,
+        args.output_dir,
+        args.threshold,
+        args.logical_size,
+        args.pixel_gap,
+        args.invert,
+    )
 
 
 if __name__ == "__main__":
