@@ -20,7 +20,7 @@ PC画面ばかり見ずに、たまには物理世界にあるデバイス上で
   - `Stop` → 完了
 - 状態に応じたKiroアニメーション
   - `idle`: その場で小さく左右に揺れる
-  - `walk`: 作業中に画面内を左右へ移動する
+  - `walk`: 右端に突然現れ、その場で左右を向く。左右に歩いたあと、消えて、左端に再び現れる。同じような動作を繰り返す。
   - `look`: その場で左右を見る
   - `completed`: 短時間上下に跳ねる
 - Kiro画像は24×24の論理ピクセルへ変換し、最近傍補間で96×96へ拡大して、論理ピクセル間に1pxの黒い格子を入れて表示する
@@ -72,7 +72,7 @@ BridgeとHook連携はmacOSで動作確認済みです。LinuxとWindowsはま�
 
 ### M5Stack
 
-動作確認した環境では、M5Stack BasicへMicroPython v1.25.0をインストールしました。別のバージョンを使用する場合は、MicroPythonのBLE・GPIO・SPI APIとの互換性を確認してください。デプロイ中はM5StackをUSB接続します。
+動作確認した環境では、M5Stack BasicへMicroPython v1.25.0をインストールしました。ファームウェアはESP32の空きメモリを確保するため、BLEを初期化してから96×96 BMPをメモリへロードします。別のバージョンを使用する場合は、MicroPythonのBLE・GPIO・SPI APIとの互換性を確認してください。デプロイ中はM5StackをUSB接続します。
 
 ## インストール
 
@@ -141,7 +141,7 @@ firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-画像BMPが生成されていない場合、デプロイスクリプトはエラーを表示して停止します。転送後、スクリプトはM5Stackをリセットします。リセット後は、`KiroBuddy`としてBLEのadvertiseを開始できるよう、M5Stackの電源を入れたままにしてください。
+同梱BMPが存在しない場合、デプロイスクリプトはエラーを表示して停止します。リポジトリを正しくcloneしたか、`firmware/assets/`の2ファイルを確認してください。転送後、スクリプトはM5Stackをリセットします。リセット後は、`KiroBuddy`としてBLEのadvertiseを開始できるよう、M5Stackの電源を入れたままにしてください。
 
 ### 3. BLE Bridgeを起動する
 
@@ -193,6 +193,24 @@ Hook通知をM5Stackへ届けるには、Bridgeが起動済みである必要が
 | `error` | `ERROR` | `look` |
 
 画面下部には、BLE/Bridge接続状態として`BLE: ON`または`BLE: OFF`と`BRIDGE CONNECTED`または`BRIDGE OFFLINE`を表示します。これらは同じBLEリンクの状態を示す表示です。
+
+### アニメーション例
+
+#### IDLE
+
+![IDLEアニメーション](assets/idle-animation.gif)
+
+#### WORKING
+
+![WORKINGアニメーション](assets/working-animation.gif)
+
+#### DONE
+
+![DONEアニメーション](assets/done-animation.gif)
+
+#### BRIDGE OFFLINE
+
+![BRIDGE OFFLINEアニメーション](assets/look-animation.gif)
 
 完了アニメーションは意図的に短く設定しています。約2秒後、別の状態を受信していなければファームウェアは`IDLE`へ戻ります。Bridgeは最新状態を保持し、BLE再接続後に再送します。ファームウェアはBLE切断時に受信済みsequenceをリセットするため、同じスナップショットを再適用できます。
 
@@ -299,7 +317,7 @@ kiroStack/
 ├── firmware/
 │   ├── main.py                        # 表示、BLE Peripheral、アニメーション
 │   ├── ili9342c.py                    # ILI9342C LCDドライバ
-│   └── assets/                        # 利用者がローカル生成する画像素材
+│   └── assets/                        # 同梱済みのピクセルアートBMP
 ├── scripts/
 │   ├── ble_test_client.py             # スタンドアロンBLEテストクライアント
 │   ├── deploy.sh                      # ファームウェアデプロイ

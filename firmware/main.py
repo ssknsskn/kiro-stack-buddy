@@ -60,7 +60,7 @@ STATE_LABELS = {
     STATE_WAITING_ON_USER: "WAITING",
     STATE_COMPLETED: "DONE",
     STATE_ERROR: "ERROR",
-    STATE_OFFLINE: "IDLE",
+    STATE_OFFLINE: "BRIDGE OFFLINE",
 }
 
 # テスト用アニメーションパターン
@@ -75,6 +75,30 @@ ANIMATION_LABELS = {
     ANIM_LOOK: "Looking",
     ANIM_COMPLETED: "Completed",
 }
+
+# WORKING中の出現・往復アニメーション設定
+IMAGE_SIZE = 96
+SCREEN_WIDTH = 320
+WALK_STEPS = 5
+WALK_STEP_PIXELS = 12
+WALK_STEP_FRAMES = 1
+WALK_FRAME_INTERVAL_MS = 70
+WALK_HIDDEN_FRAMES = 1
+WALK_LOOK_FRAMES = 4  # 出現後のキョロキョロ
+WALK_SEQUENCE_FRAMES = (
+    2  # 右端・左端への出現フレーム
+    + WALK_LOOK_FRAMES  # 右端キョロキョロ
+    + WALK_STEPS * WALK_STEP_FRAMES
+    + WALK_STEPS * WALK_STEP_FRAMES
+    + WALK_HIDDEN_FRAMES
+    + WALK_LOOK_FRAMES  # 左端キョロキョロ
+    + WALK_STEPS * WALK_STEP_FRAMES
+    + WALK_STEPS * WALK_STEP_FRAMES
+    + WALK_HIDDEN_FRAMES
+)
+WALK_RIGHT_X = SCREEN_WIDTH - IMAGE_SIZE
+WALK_LEFT_X = 0
+
 
 
 class KiroBuddy:
@@ -95,6 +119,7 @@ class KiroBuddy:
         self.pending_state = None
         self.current_sequence = -1
         self.completed_until = None
+        self._drawn_status_key = None
 
         # BLE状態
         self.ble = None
@@ -110,6 +135,8 @@ class KiroBuddy:
         self.anim_y = 30
         self.anim_x_prev = 112
         self.anim_y_prev = 30
+        self.anim_visible = True
+        self.anim_visible_prev = True
         self.anim_frame = 0
         self.facing_left = False
         self.animation_index = 0
@@ -117,15 +144,22 @@ class KiroBuddy:
 
         # BMPデータを事前にメモリへロード
         print("[init] BMP ロード中...")
-        self.bmp_right = self._load_bmp("/kiro_bw_96x96.bmp")
-        self.bmp_left = self._load_bmp("/kiro_bw_96x96_left.bmp")
+        self.bmp_right = None
+        self.bmp_left = None
         # 旧フレームを残さず描画するための小さな1行バッファ
         self.transition_row = bytearray(160 * 2)
         self.transition_row_view = memoryview(self.transition_row)
-        print("[init] BMP ロード完了")
+
+        # BLEをBMPロードより先に初期化する。
+        # ESP32のBLE/NimBLEは大きな連続RAMブロックを要求するため、
+        # BMPバッファ確保後ではヒープが断片化してクラッシュする。
+        self._init_ble()
         gc.collect()
 
-        self._init_ble()
+        self.bmp_right = self._load_bmp("/kiro_bw_96x96.bmp")
+        self.bmp_left = self._load_bmp("/kiro_bw_96x96_left.bmp")
+        print("[init] BMP ロード完了")
+        gc.collect()
         print("[init] 準備完了")
 
     def _init_ble(self):
@@ -315,13 +349,18 @@ class KiroBuddy:
 
     def _set_animation_pattern_by_name(self, pattern):
         """名前でアニメーションパターンを変更"""
-        if pattern in ANIMATION_PATTERNS:
-            self.animation_index = ANIMATION_PATTERNS.index(pattern)
-            self.animation_pattern = pattern
-            self.anim_frame = 0
-            self.anim_x = 112
-            self.anim_y = 30
-            self.facing_left = False
+        if pattern not in ANIMATION_PATTERNS:
+            return
+        if self.animation_pattern == pattern:
+            return
+
+        self.animation_index = ANIMATION_PATTERNS.index(pattern)
+        self.animation_pattern = pattern
+        self.anim_frame = 0
+        self.anim_x = 112
+        self.anim_y = 30
+        self.anim_visible = True
+        self.facing_left = False
 
     def _set_animation_pattern(self, index):
         """アニメーションパターンを変更"""
@@ -330,6 +369,7 @@ class KiroBuddy:
         self.anim_frame = 0
         self.anim_x = 112
         self.anim_y = 30
+        self.anim_visible = True
         self.facing_left = False
         self.msg = ANIMATION_LABELS[self.animation_pattern]
         print(f"[ANIMATION] パターン変更: {self.animation_pattern}")
@@ -350,21 +390,74 @@ class KiroBuddy:
         self.anim_y = 30
 
     def _animate_walk(self, frame):
-        """作業中：小刻みに動きながら、画面内を広く左右へ移動"""
-        # 1フレーム4px、60フレームで往復する三角波。
-        # x=52〜172、画像右端は268pxで画面外に出ない。
-        frame_in_cycle = frame % 60
-        if frame_in_cycle < 15:
-            offset = frame_in_cycle * 4
-        elif frame_in_cycle < 45:
-            offset = 60 - (frame_in_cycle - 15) * 4
-        else:
-            offset = -60 + (frame_in_cycle - 45) * 4
+        """作業中：画面端に現れ、キョロキョロしてから5歩ずつ往復して消える"""
+        phase = (frame - 1) % WALK_SEQUENCE_FRAMES
+        movement_frames = WALK_STEPS * WALK_STEP_FRAMES
 
-        self.anim_x = 112 + offset
+        # 右側フェーズの境界
+        right_look_end = WALK_LOOK_FRAMES
+        right_walk_end = right_look_end + movement_frames
+        right_return_end = right_walk_end + movement_frames
+        right_hide_end = right_return_end + WALK_HIDDEN_FRAMES
+
+        # 左側フェーズの境界
+        left_look_end = right_hide_end + WALK_LOOK_FRAMES
+        left_walk_end = left_look_end + movement_frames
+        left_return_end = left_walk_end + movement_frames
+
         self.anim_y = 30
-        # frame 15〜44は右端から左端へ移動中なので左向き
-        self.facing_left = 15 <= frame_in_cycle < 45
+        self.anim_visible = True
+
+        if phase == 0:
+            # 右端に突然現れる
+            self.anim_x = WALK_RIGHT_X
+            self.facing_left = True
+        elif phase <= right_look_end:
+            # 右端でキョロキョロ
+            self.anim_x = WALK_RIGHT_X
+            self.facing_left = (phase % 2) == 0
+        elif phase <= right_walk_end:
+            # 右端から左へ5歩
+            p = phase - right_look_end
+            step = min((p + WALK_STEP_FRAMES - 1) // WALK_STEP_FRAMES, WALK_STEPS)
+            self.anim_x = WALK_RIGHT_X - step * WALK_STEP_PIXELS
+            self.facing_left = True
+        elif phase <= right_return_end:
+            # 左へ5歩進んだ位置から右へ5歩
+            p = phase - right_walk_end
+            step = min((p + WALK_STEP_FRAMES - 1) // WALK_STEP_FRAMES, WALK_STEPS)
+            self.anim_x = WALK_RIGHT_X - (WALK_STEPS - step) * WALK_STEP_PIXELS
+            self.facing_left = False
+        elif phase < right_hide_end:
+            # 右端で消える
+            self.anim_x = WALK_RIGHT_X
+            self.facing_left = False
+            self.anim_visible = False
+        elif phase == right_hide_end:
+            # 左端に突然現れる
+            self.anim_x = WALK_LEFT_X
+            self.facing_left = False
+        elif phase <= left_look_end:
+            # 左端でキョロキョロ
+            self.anim_x = WALK_LEFT_X
+            self.facing_left = (phase % 2) == 1
+        elif phase <= left_walk_end:
+            # 左端から右へ5歩
+            p = phase - left_look_end
+            step = min((p + WALK_STEP_FRAMES - 1) // WALK_STEP_FRAMES, WALK_STEPS)
+            self.anim_x = WALK_LEFT_X + step * WALK_STEP_PIXELS
+            self.facing_left = False
+        elif phase <= left_return_end:
+            # 右へ5歩進んだ位置から左へ5歩
+            p = phase - left_walk_end
+            step = min((p + WALK_STEP_FRAMES - 1) // WALK_STEP_FRAMES, WALK_STEPS)
+            self.anim_x = WALK_LEFT_X + (WALK_STEPS - step) * WALK_STEP_PIXELS
+            self.facing_left = True
+        else:
+            # 左端で消える
+            self.anim_x = WALK_LEFT_X
+            self.facing_left = True
+            self.anim_visible = False
 
     def _animate_look(self, frame):
         """確認中：その場で左右を向く"""
@@ -456,48 +549,11 @@ class KiroBuddy:
             self.lcd.fill_rect(overlap_right, middle_top, old_right - overlap_right, middle_height, BLACK)
 
     def _draw_kiro_transition(self):
-        """黒背景と新Kiroを小さな1行バッファで一括更新"""
-        old_left = int(self.anim_x_prev)
-        old_top = int(self.anim_y_prev)
-        new_left = int(self.anim_x)
-        new_top = int(self.anim_y)
-
-        # 旧位置と新位置を含む最小領域だけを更新する
-        left = min(old_left, new_left)
-        top = min(old_top, new_top)
-        right = max(old_left + 96, new_left + 96)
-        bottom = max(old_top + 96, new_top + 96)
-        region_width = right - left
-        region_height = bottom - top
-        x_offset = new_left - left
-        y_offset = new_top - top
-
-        # 新しいKiroの画像データ
-        bmp_data = self.bmp_left if self.facing_left else self.bmp_right
-        row_bytes = 96 * 2
-        output_row_bytes = region_width * 2
-
-        lcd = self.lcd
-        lcd._set_window(left, top, right - 1, bottom - 1)
-        lcd.cs.value(0)
-        lcd.dc.value(1)
-
-        for row in range(region_height):
-            # 行全体を黒にする。旧フレームの白はここで確実に消える。
-            for index in range(output_row_bytes):
-                self.transition_row[index] = 0
-
-            source_row = row - y_offset
-            if 0 <= source_row < 96:
-                source_start = source_row * row_bytes
-                target_start = x_offset * 2
-                self.transition_row[target_start:target_start + row_bytes] = (
-                    bmp_data[source_start:source_start + row_bytes]
-                )
-
-            lcd.spi.write(self.transition_row_view[:output_row_bytes])
-
-        lcd.cs.value(1)
+        """新しいKiroを先に描画し、旧位置の露出部分を後から消去する"""
+        if self.anim_visible:
+            self._draw_kiro()
+        if self.anim_visible_prev:
+            self._clear_exposed_previous_kiro()
 
     def _draw(self):
         """LCD描画"""
@@ -505,22 +561,53 @@ class KiroBuddy:
 
         if self.frame_count == 0:
             lcd.fill(BLACK)
-            self._draw_kiro()
+            if self.anim_visible:
+                self._draw_kiro()
         elif self.animation_pattern == ANIM_WALK:
-            # walkだけは広い描画領域を黒背景ごと更新して残像を抑える
-            self._draw_kiro_transition()
+            # walkは出現・消失を含むため、表示状態に応じて描画する。
+            if self.anim_visible_prev and self.anim_visible:
+                self._draw_kiro_transition()
+            elif self.anim_visible_prev and not self.anim_visible:
+                lcd.fill_rect(
+                    int(self.anim_x_prev),
+                    int(self.anim_y_prev),
+                    IMAGE_SIZE,
+                    IMAGE_SIZE,
+                    BLACK,
+                )
+            elif self.anim_visible:
+                self._draw_kiro()
         else:
             # idle/look/completedは従来の軽い差分描画に戻す
-            self._draw_kiro()
-            self._clear_exposed_previous_kiro()
+            if self.anim_visible:
+                self._draw_kiro()
+            if self.anim_visible_prev and not self.anim_visible:
+                lcd.fill_rect(
+                    int(self.anim_x_prev),
+                    int(self.anim_y_prev),
+                    IMAGE_SIZE,
+                    IMAGE_SIZE,
+                    BLACK,
+                )
+            elif self.anim_visible:
+                self._clear_exposed_previous_kiro()
 
         self.anim_x_prev = self.anim_x
         self.anim_y_prev = self.anim_y
+        self.anim_visible_prev = self.anim_visible
 
         # 最小限の状態表示。詳細なログやcredit/tokenは表示しない。
         color = STATE_COLORS.get(self.pet_state, WHITE)
-        status_text = (STATE_LABELS.get(self.pet_state, "IDLE") + "       ")[:7]
-        lcd.text_bg(status_text, 10, 150, color, BLACK, 2)
+        status_label = STATE_LABELS.get(self.pet_state, "IDLE")
+        status_text = (
+            status_label if self.pet_state == STATE_OFFLINE
+            else (status_label + "       ")[:7]
+        )
+        status_key = (status_text, color)
+        if status_key != self._drawn_status_key:
+            lcd.fill_rect(10, 150, 240, 16, BLACK)
+            lcd.text_bg(status_text, 10, 150, color, BLACK, 2)
+            self._drawn_status_key = status_key
 
         bridge_text = (("BRIDGE CONNECTED" if self.ble_link_connected else "BRIDGE OFFLINE") + "                ")[:16]
         bridge_color = GREEN if self.ble_link_connected else GRAY
@@ -565,9 +652,14 @@ class KiroBuddy:
             self._update_ble_state()
             self._check_buttons()
 
-            # 50msごとにアニメーションと描画を更新
+            # 状態に応じた間隔でアニメーションと描画を更新
             now = time.ticks_ms()
-            if time.ticks_diff(now, self.last_update) > 50:
+            update_interval = (
+                WALK_FRAME_INTERVAL_MS
+                if self.animation_pattern == ANIM_WALK
+                else 50
+            )
+            if time.ticks_diff(now, self.last_update) > update_interval:
                 self.last_update = now
                 self.anim_frame += 1
                 self._update_animation()
