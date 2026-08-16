@@ -20,7 +20,7 @@ Kiro Stack Buddy connects a Kiro IDE workspace and an M5Stack Basic over **Bluet
   - `Stop` → completed
 - State-based Kiro animations:
   - `idle`: small side-to-side sway
-  - `walk`: moves across the screen while work is in progress
+  - `walk`: appears at the right edge, looks left and right in place for about 200ms, walks left for five 12px steps and right for five steps at about 50ms per step, disappears at the right edge, then repeats the same look-and-walk sequence from the left edge in the opposite direction
   - `look`: looks from side to side in place
   - `completed`: briefly bounces up and down
 - The Kiro image is rendered as 24×24 logical pixels, enlarged to 96×96 with nearest-neighbor scaling, and separated by a 1px black grid
@@ -72,7 +72,7 @@ The Bridge and Hook integration have been tested on macOS. Linux and Windows hav
 
 ### M5Stack
 
-The tested environment uses MicroPython v1.25.0 on an M5Stack Basic. If you use another version, verify compatibility with the MicroPython BLE, GPIO, and SPI APIs. Keep the M5Stack connected over USB during deployment.
+The tested environment uses MicroPython v1.25.0 on an M5Stack Basic. To preserve free ESP32 memory, the firmware initializes BLE before loading the 96×96 BMP data into memory. If you use another version, verify compatibility with the MicroPython BLE, GPIO, and SPI APIs. Keep the M5Stack connected over USB during deployment.
 
 ## Installation
 
@@ -141,7 +141,7 @@ firmware/assets/kiro_bw_96x96.bmp
 firmware/assets/kiro_bw_96x96_left.bmp
 ```
 
-If the BMP files have not been generated, the deployment script stops with an error. It resets the M5Stack after transfer. Keep the M5Stack powered on so that it can advertise over BLE as `KiroBuddy`.
+If the bundled BMP files are missing, the deployment script stops with an error. Confirm that you cloned the repository correctly and that both files exist in `firmware/assets/`. It resets the M5Stack after transfer. Keep the M5Stack powered on so that it can advertise over BLE as `KiroBuddy`.
 
 ### 3. Start the BLE Bridge
 
@@ -299,7 +299,7 @@ kiroStack/
 ├── firmware/
 │   ├── main.py                        # Display, BLE peripheral, animation
 │   ├── ili9342c.py                    # ILI9342C LCD driver
-│   └── assets/                        # Locally generated user image assets
+│   └── assets/                        # Bundled pixel-art BMP assets
 ├── scripts/
 │   ├── ble_test_client.py             # Standalone BLE test client
 │   ├── deploy.sh                      # Firmware deployment
